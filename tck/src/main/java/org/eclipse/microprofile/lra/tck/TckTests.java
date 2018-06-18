@@ -83,10 +83,12 @@ public class TckTests {
 
         initTck(lraClient);
 
-        run.add("timeLimit", TckTests::timeLimit, verbose);
+        run.add("timeLimit", TckTests::timeLimitRequiredLRA, verbose);
+        run.add("timeLimit", TckTests::timeLimitSupportsLRA, verbose);
         run.add("startLRA", TckTests::startLRA, verbose);
         run.add("cancelLRA", TckTests::cancelLRA, verbose);
         run.add("closeLRA", TckTests::closeLRA, verbose);
+        run.add("delayCloseLRA", TckTests::delayCloseLRA, verbose);
         run.add("getActiveLRAs", TckTests::getActiveLRAs, verbose);
         run.add("getAllLRAs", TckTests::getAllLRAs, verbose);
         run.add("isActiveLRA", TckTests::isActiveLRA, verbose);
@@ -204,6 +206,33 @@ public class TckTests {
         List<LRAInfo> lras = lraClient.getAllLRAs();
 
         assertNull(getLra(lras, lra.toExternalForm()), "closeLRA via client: lra still active", null);
+
+        return lra.toExternalForm();
+    }
+
+    @Test
+    private String delayCloseLRA () throws WebApplicationException {
+        int[] cnt1 = {completedCount(true), completedCount(false)};
+
+        List<LRAInfo> lras = lraClient.getActiveLRAs();
+        int count = lras.size();
+        URL lra = lraClient.startLRA(null, "SpecTest#join", LRA_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+        WebTarget resourcePath = msTarget.path(ACTIVITIES_PATH).path("work").queryParam("how", "wait").queryParam("arg", "recovery");
+        Response response = resourcePath
+                .request().header(LRAClient.LRA_HTTP_HEADER, lra).put(Entity.text(""));
+        checkStatusAndClose(response, Response.Status.OK.getStatusCode(), false, resourcePath);
+        lraClient.closeLRA(lra);
+
+
+        // check that participant was told to complete
+        int[] cnt2 = {completedCount(true), completedCount(false)};
+
+        assertEquals(cnt1[0] + 1, cnt2[0], "delayCloseLRA: wrong completion count", resourcePath);
+        assertEquals(cnt1[1], cnt2[1], "delayCloseLRA: wrong compensation count", resourcePath);
+
+        lras = lraClient.getActiveLRAs();
+        System.out.printf("join ok %d versus %d lras%n", count, lras.size());
+        assertEquals(count, lras.size(), "join: wrong LRA count", resourcePath);
 
         return lra.toExternalForm();
     }
@@ -495,12 +524,12 @@ public class TckTests {
     }
 
     @Test
-    private String timeLimit() {
+    private String timeLimitRequiredLRA() {
         int[] cnt1 = {completedCount(true), completedCount(false)};
         Response response = null;
 
         try {
-            WebTarget resourcePath = msTarget.path(ACTIVITIES_PATH).path("timeLimit");
+            WebTarget resourcePath = msTarget.path(ACTIVITIES_PATH).path("timeLimitRequiredLRA");
             response = resourcePath
                     .request()
                     .get();
@@ -523,6 +552,53 @@ public class TckTests {
                     "timeLimit: complete was called instead of compensate", resourcePath);
             assertEquals(cnt1[1] + 1, cnt2[1],
                     "timeLimit: compensate should have been called", resourcePath);
+        } finally {
+
+            if (response != null)
+                response.close();
+        }
+
+        return "passed";
+    }
+
+    @Test
+    private String timeLimitSupportsLRA() {
+        // start an LRA with a timeout longer than the participant timeout
+        // the expectation is that when the partipant timeout expires the LRA will be cancelled
+        URL lra = lraClient.startLRA(null, "SpecTest#timeLimitSupportsLRA", LRA_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+
+        int[] cnt1 = {completedCount(true), completedCount(false)};
+        Response response = null;
+
+        try {
+            WebTarget resourcePath = msTarget.path(ACTIVITIES_PATH).path("timeLimitSupportsLRA");
+            response = resourcePath
+                    .request()
+                    .get();
+
+            checkStatusAndClose(response, -1, true, resourcePath);
+
+            // Note that the timeout firing will cause the coordinator to compensate
+            // the LRA so it may no longer exist
+            // (depends upon how long the coordinator keeps a record of finished LRAs
+
+            // check that participant was invoked
+            int[] cnt2 = {completedCount(true), completedCount(false)};
+
+            /*
+             * The call to activities/timeLimit should have started an LRA whch should have timed out
+             * (because the called resource method sleeps for long than the @TimeLimit annotation specifies).
+             * Therefore the it should have compensated:
+             */
+            assertEquals(cnt1[0], cnt2[0],
+                    "timeLimit: complete was called instead of compensate", resourcePath);
+            assertEquals(cnt1[1] + 1, cnt2[1],
+                    "timeLimit: compensate should have been called", resourcePath);
+
+            // now validate that he LRA was cancelled
+            List<LRAInfo> lras = lraClient.getAllLRAs();
+
+            assertNull(getLra(lras, lra.toExternalForm()), "timeLimitSupportsLRA via client: lra still active", null);
         } finally {
 
             if (response != null)

@@ -31,6 +31,8 @@ public class Activity implements Serializable {
     private CompensatorStatus status;
     private String userData;
     private String endData;
+    private String how;
+    private String arg;
 
     private final AtomicInteger acceptedCount = new AtomicInteger(0);
 
@@ -108,5 +110,21 @@ public class Activity implements Serializable {
 
     public void setAcceptedCount(int acceptedCount) {
         this.acceptedCount.set(acceptedCount);
+    }
+
+    public String getHow() {
+        return how;
+    }
+
+    public void setHow(String how) {
+        this.how = how;
+    }
+
+    public String getArg() {
+        return arg;
+    }
+
+    public void setArg(String arg) {
+        this.arg = arg;
     }
 }

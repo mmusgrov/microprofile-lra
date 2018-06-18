@@ -351,6 +351,13 @@ immediately by either
 * the method is marked as a JAX-RS asynchronous method (using the
 `javax.ws.rs.container.Suspended` annotation).
 
+1. `204 No Content` and no body
+      to indicate that the participant finished successfully.
+      The participant can assume that it can clean up.
+
+If the particpant has already previously successfully completed or
+compensated then it MAY return `404 Not Found`.
+
 When the coordinator knows it has the final status it will inform the
 participant that it can clean up. The developer indicates which method
 to use for this purpose by annotating one of the methods with the JAX-RS
@@ -436,6 +443,11 @@ must remember the fact until explicitly told that it can clean up using
 the `@Forget` annotation. The method annotated with the `@Forget`
 annotation is a standard REST endpoint expected to be used with JAX-RS
 `@DELETE` annotation.
+
+The coordinator will invoke the forget method with best effort semantics.
+The participant can autonomously perform forget actions by querying the
+coordinator and if the LRA no longer exists it can safely forget about
+this LRA.
 
 [[failure-resilience]]
 ==== Recovery Requirements

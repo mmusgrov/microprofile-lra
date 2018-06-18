@@ -30,6 +30,15 @@ import java.lang.annotation.Target;
  * reporting it when asked for its' {@link Status}) until it is explicitly
  * told to forget. To support this requirement the developer should annotate
  * one of the participant methods with @Forget.
+ *
+ * The LRA context is made available to the method in a header with the name
+ * {@link org.eclipse.microprofile.lra.client.LRAClient#LRA_HTTP_HEADER}
+ * provided the status method is annotated with @LRA(LRA.Type.SUPPORTS)
+ *
+ * The coordinator will invoke the forget method with best effort semantics.
+ * The participant can autonomously perform forget actions by querying the
+ * coordinator and if the LRA no longer exists it can safely forget about
+ * this LRA.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD})

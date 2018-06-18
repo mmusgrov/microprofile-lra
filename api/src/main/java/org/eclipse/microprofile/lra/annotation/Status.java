@@ -37,6 +37,10 @@ import java.lang.annotation.Target;
  * listed in {@link CompensatorStatus} whenever an HTTP GET request is made on
  * the method.
  *
+ * The LRA context is made available to the method in a header with the name
+ * {@link org.eclipse.microprofile.lra.client.LRAClient#LRA_HTTP_HEADER}
+ * provided the status method is annotated with @LRA(LRA.Type.SUPPORTS)
+ *
  * If the participant has not yet been asked to complete or compensate it should
  * return with a <code>412 Precondition Failed</code> HTTP status code. NB although
  * this circumstance could be detected via the framework it would necessitate a

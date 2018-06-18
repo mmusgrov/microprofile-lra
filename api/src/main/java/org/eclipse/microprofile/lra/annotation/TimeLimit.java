@@ -42,7 +42,7 @@ public @interface TimeLimit {
      *
      * For compensations the corresponding compensation (a method annotated with
      * {@link Compensate} in the same class) will be invoked if the time limit is
-     * reached.
+     * reached provided that corresponding LRA has not already been asked to close.
      */
     long limit() default 0;
 

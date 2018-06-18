@@ -35,6 +35,7 @@ import org.eclipse.microprofile.lra.client.IllegalLRAStateException;
 import org.eclipse.microprofile.lra.tck.participant.model.Activity;
 import org.eclipse.microprofile.lra.annotation.CompensatorStatus;
 
+import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import javax.ws.rs.DELETE;
@@ -89,6 +90,14 @@ public class ActivityController {
 
     @Inject
     private ActivityService activityService;
+
+    private String recoveryUrl;
+
+    @PostConstruct
+    public void postConstruct() {
+        // TODO get it from LRAClient
+        recoveryUrl = System.getProperty("RECOVERY_URL");
+    }
 
     /**
      * Performing a GET on the participant URL will return the current status of the
@@ -195,6 +204,9 @@ public class ActivityController {
         activity.setStatusUrl(String.format("%s/%s/activity/completed", context.getBaseUri(), lraId));
 
         System.out.printf("ActivityController completing %s%n", lraId);
+
+        endCheck(activity, true);
+
         return Response.ok(activity.getStatusUrl()).build();
     }
 
@@ -225,6 +237,9 @@ public class ActivityController {
         activity.setStatusUrl(String.format("%s/%s/activity/compensated", context.getBaseUri(), lraId));
 
         System.out.printf("ActivityController compensating %s%n", lraId);
+
+        endCheck(activity, false);
+
         return Response.ok(activity.getStatusUrl()).build();
     }
 
@@ -306,10 +321,15 @@ public class ActivityController {
     @Path("/work")
     @LRA(LRA.Type.REQUIRED)
     public Response activityWithLRA(@HeaderParam(LRA_HTTP_RECOVERY_HEADER) String rcvId,
-                                    @HeaderParam(LRA_HTTP_HEADER) String lraId) {
+                                    @HeaderParam(LRA_HTTP_HEADER) String lraId,
+                                    @QueryParam("how") String how,
+                                    @QueryParam("arg") String arg) {
         assertHeaderPresent(lraId);
 
         Activity activity = addWork(lraId, rcvId);
+
+        activity.setHow(how);
+        activity.setArg(arg);
 
         if (activity == null)
             return Response.status(Response.Status.EXPECTATION_FAILED).entity("Missing lra data").build();
@@ -400,6 +420,23 @@ public class ActivityController {
         }
     }
 
+    private void endCheck(Activity activity, boolean complete) {
+        String how = activity.getHow();
+        String arg = activity.getArg();
+
+        activity.setHow(null);
+        activity.setArg(null);
+
+        if ("wait".equals(how) && arg != null && "recovery".equals(arg) && recoveryUrl != null) {
+            Response response = ClientBuilder.newClient()
+                    .target(recoveryUrl)
+                    .request()
+                    .get();
+
+            checkStatusAndClose(response, Response.Status.OK.getStatusCode());
+        }
+    }
+
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     @LRA(LRA.Type.NOT_SUPPORTED)
@@ -450,11 +487,30 @@ public class ActivityController {
     }
 
     @GET
-    @Path("/timeLimit")
+    @Path("/timeLimitRequiredLRA")
     @Produces(MediaType.APPLICATION_JSON)
     @TimeLimit(limit = 100, unit = TimeUnit.MILLISECONDS)
     @LRA(value = LRA.Type.REQUIRED)
-    public Response timeLimit(@HeaderParam(LRA_HTTP_HEADER) String lraId) {
+    public Response timeLimitRequiredLRA(@HeaderParam(LRA_HTTP_HEADER) String lraId) {
+        assertHeaderPresent(lraId);
+
+        activityService.add(new Activity(lraId));
+
+        try {
+            Thread.sleep(300); // sleep for 200 miliseconds (should be longer than specified in the @TimeLimit annotation)
+        }
+        catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        return Response.status(Response.Status.OK).entity(Entity.text("Simulate buisiness logic timeoout")).build();
+    }
+
+    @GET
+    @Path("/timeLimitSupportsLRA")
+    @Produces(MediaType.APPLICATION_JSON)
+    @TimeLimit(limit = 100, unit = TimeUnit.MILLISECONDS)
+    @LRA(value = LRA.Type.SUPPORTS)
+    public Response timeLimitSupportsLRA(@HeaderParam(LRA_HTTP_HEADER) String lraId) {
         assertHeaderPresent(lraId);
 
         activityService.add(new Activity(lraId));
@@ -518,6 +574,8 @@ public class ActivityController {
         activity.setStatus(CompensatorStatus.Compensated);
         activity.setStatusUrl(String.format("%s/%s/activity/compensated", context.getBaseUri(), txId));
 
+        endCheck(activity, false);
+
         return Response.ok(activity.getStatusUrl()).build();
     }
 
@@ -543,6 +601,8 @@ public class ActivityController {
 
         activity.setStatus(CompensatorStatus.Completed);
         activity.setStatusUrl(String.format("%s/%s/activity/completed", context.getBaseUri(), txId));
+
+        endCheck(activity, true);
 
         return Response.ok(activity.getStatusUrl()).build();
     }
