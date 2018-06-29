@@ -100,7 +100,10 @@
             <name>Eclipse MicroProfile Repository - Snapshots</name>
             <url>https://repo.eclipse.org/content/repositories/microprofile-snapshots/</url>
 
-            <uniqueVersion>true</uniqueVersion>  <!-- for keeping multipe snapshot versions - maybe for staging a final version besides nightly versions -->
+	    <!-- for keeping multipe snapshot versions
+		  (maybe for staging a final version besides nightly versions)
+              -->
+            <uniqueVersion>true</uniqueVersion>
         </snapshotRepository>
     </distributionManagement>
 
