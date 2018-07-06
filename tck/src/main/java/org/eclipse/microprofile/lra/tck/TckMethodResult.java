@@ -60,9 +60,16 @@ class TckMethodResult {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
         TckMethodResult tckMethodResult = (TckMethodResult) o;
+
         return Objects.equals(testName, tckMethodResult.testName);
     }
 
@@ -72,7 +79,7 @@ class TckMethodResult {
         return Objects.hash(testName);
     }
 
-    void test(TckTests suite){
+    void test(TckTests suite) {
         System.out.printf("Starting test %s%n", testName);
 
         suite.before();

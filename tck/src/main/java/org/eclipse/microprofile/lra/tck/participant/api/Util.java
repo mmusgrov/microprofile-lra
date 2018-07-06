@@ -78,14 +78,16 @@ public class Util {
 //                    if (timeLimit != null)
 //                        paths.put(TIMELIMIT_PARAM_NAME, Long.toString(timeLimit.unit().toMillis(timeLimit.limit())));
 
-                    if (isAsyncCompletion(method))
+                    if (isAsyncCompletion(method)) {
                         asyncTermination[0] = true;
+                    }
                 }
 
                 if (checkMethod(paths, COMPLETE, (Path) pathAnnotation,
                         method.getAnnotation(Complete.class), uriPrefix) != 0) {
-                    if (isAsyncCompletion(method))
+                    if (isAsyncCompletion(method)) {
                         asyncTermination[0] = true;
+                    }
                 }
                 checkMethod(paths, STATUS, (Path) pathAnnotation,
                         method.getAnnotation(Status.class), uriPrefix);
@@ -115,14 +117,16 @@ public class Util {
 
     private static StringBuilder makeLink(StringBuilder b, String uriPrefix, String key, String value) {
 
-        if (value == null)
+        if (value == null) {
             return b;
+        }
 
         String terminationUri = uriPrefix == null ? value : String.format("%s%s", uriPrefix, value);
         Link link =  Link.fromUri(terminationUri).title(key + " URI").rel(key).type(MediaType.TEXT_PLAIN).build();
 
-        if (b.length() != 0)
+        if (b.length() != 0) {
             b.append(',');
+        }
 
         return b.append(link);
     }
@@ -137,12 +141,14 @@ public class Util {
      */
     public static boolean isAsyncCompletion(Method method) {
         if (method.isAnnotationPresent(Complete.class) || method.isAnnotationPresent(Compensate.class)) {
-            for (Annotation[] ann : method.getParameterAnnotations())
-                for (Annotation an : ann)
+            for (Annotation[] ann : method.getParameterAnnotations()) {
+                for (Annotation an : ann) {
                     if (Suspended.class.getName().equals(an.annotationType().getName())) {
                         LOGGER.log(Level.WARNING, "JAX-RS @Suspended annotation is untested");
                         return true;
                     }
+                }
+            }
         }
 
         return false;

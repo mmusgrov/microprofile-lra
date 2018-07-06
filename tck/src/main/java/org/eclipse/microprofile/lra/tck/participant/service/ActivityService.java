@@ -34,8 +34,9 @@ public class ActivityService {
     private Map<String, Activity> activities = new HashMap<>();
 
     public Activity getActivity(String txId) throws NotFoundException {
-        if (!activities.containsKey(txId))
+        if (!activities.containsKey(txId)) {
             throw new NotFoundException(Response.status(404).entity("Invalid activity id: " + txId).build());
+        }
 
         return activities.get(txId);
     }
