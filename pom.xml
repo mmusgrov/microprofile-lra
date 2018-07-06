@@ -20,7 +20,7 @@
     <groupId>io.narayana.microprofile.lra</groupId>
     <artifactId>microprofile-lra-parent</artifactId>
     <name>MicroProfile Long Running Actions</name>
-    <version>0.0.2.Final</version>
+    <version>0.0.3.Final-SNAPSHOT</version>
     <description>Eclipse MicroProfile LRA Feature - Parent POM</description>
     <packaging>pom</packaging>
 
@@ -90,6 +90,15 @@
     </scm>
 
     <distributionManagement>
+        <!-- to upload to the jboss nexus uncomment the following and comment the eclipse repo -->
+        <!--
+        <repository>
+            <id>jboss-releases-repository</id>
+            <name>JBoss Release Repository</name>
+            <url>https://repository.jboss.org/nexus/service/local/staging/deploy/maven2/</url>
+        </repository>
+        -->
+
         <repository>
             <id>repo.eclipse.org</id>
             <name>Eclipse MicroProfile Repository - Releases</name>
