@@ -47,5 +47,7 @@ If you want to run a single test replace `all` with the name of the test you wis
 `timeLimit`, `startLRA`, `cancelLRA`, `closeLRA`, `getActiveLRAs`, `getAllLRAs`, `isActiveLRA,
 `nestedActivity`, `completeMultiLevelNestedActivity`, `compensateMultiLevelNestedActivity`,
 `mixedMultiLevelNestedActivity`, `joinLRAViaHeader`, `join`, `leaveLRA`, `leaveLRAViaAPI`,
-`dependentLRA`, `cancelOn`, `cancelOnFamily` or `acceptTest`.
+`dependentLRA`, `finishTime`, `cancelOnFamily`, `acceptTest`, `noLRATest`, `closeLRAWaitForRecovery`,
+`closeLRAWaitIndefinitely`, `connectionHangup`, `joinLRAViaBody`, `timeLimitRequiredLRA`
+or `participantTimeLimitSupportsLRA`
 

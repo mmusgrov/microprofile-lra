@@ -20,6 +20,8 @@
 
 package org.eclipse.microprofile.lra.client;
 
+import java.time.ZoneOffset;
+
 /**
  * Data object carrying information about an instance
  * of LRA (specified by lra id) and it's status.
@@ -60,4 +62,42 @@ public interface LRAInfo {
      * @return  true if lra is top level (not nested), false otherwise
      */
     boolean isTopLevel();
+
+    /**
+     * report the time in milliseconds when this LRA was started.
+     *
+     * @return the time in milliseconds when this LRA was started.
+     */
+    long getStartTime();
+
+    /**
+     * Report the time in milliseconds when this LRA was asked to finish.
+     * This time does not include the time it takes for participants to
+     * finish
+     *
+     * @return the time in milliseconds when this LRA was asked to finish.
+     */
+    long getFinishTime();
+
+    /**
+     * report the time in milliseconds when the client requested this data
+     *
+     * @return the time in milliseconds when the client requested this data
+     */
+    long getTimeNow();
+
+    /**
+     * time-zone offset from Greenwich/UTC that the start, finish and current
+     * times are being reported from
+     * @return
+     */
+    ZoneOffset getZoneOffset();
+
+    /**
+     * The current status of this LRA. Valid values match
+     * {@link org.eclipse.microprofile.lra.annotation.CompensatorStatus}
+     * @return the status of the LRA. A null value or the empty string
+     * means that the LRA is still active
+     */
+    String getStatus();
 }

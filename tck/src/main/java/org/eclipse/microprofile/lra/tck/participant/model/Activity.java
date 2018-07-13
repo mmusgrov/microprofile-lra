@@ -23,9 +23,13 @@ import org.eclipse.microprofile.lra.annotation.CompensatorStatus;
 
 import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Activity implements Serializable {
     private static final long serialVersionUID = -4141599248046299770L;
+    private static final Logger LOGGER = Logger.getLogger(Activity.class.getName());
+
     public String id;
     private String rcvUrl;
     private String statusUrl;
@@ -36,6 +40,7 @@ public class Activity implements Serializable {
     private String endData;
     private String how;
     private String arg;
+    private boolean waiting;
 
     private final AtomicInteger acceptedCount = new AtomicInteger(0);
 
@@ -144,5 +149,26 @@ public class Activity implements Serializable {
 
     public String getId() {
         return id;
+    }
+
+    public synchronized void waitFor(long ms) {
+        waiting = true;
+
+        try {
+            wait(ms <= 0 ? Long.MAX_VALUE : ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Throwable e) {
+            LOGGER.log(Level.INFO, "activity wait threw " + e.getMessage());
+        }
+
+        waiting = false;
+    }
+
+    public synchronized void cleanup() {
+        if (waiting) {
+            notify();
+            waiting = false;
+        }
     }
 }

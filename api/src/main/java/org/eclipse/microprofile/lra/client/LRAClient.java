@@ -187,6 +187,36 @@ public interface LRAClient {
     String closeLRA(URL lraId) throws GenericLRAException;
 
     /**
+     * Return detailed information corresponding to an LRA id
+     *
+     * @param id the id of the LRA
+     * @return full details of the requested LRA
+     * @throws GenericLRAException if there was an error getting the requested
+     * information from the LRA coordinator
+     */
+    LRAInfo getLRAInfo(URL id) throws GenericLRAException;
+
+    /**
+     * Set the connect timeout for subsequent client requests.
+     * Value 0 represents infinity. Negative values are not allowed.
+     *
+     * @param connect he maximum time to wait
+     * @param unit the time unit of the timeout argument
+     * @throws IllegalArgumentException - when the value is negative
+     */
+    void connectTimeout(long connect,  TimeUnit unit);
+
+    /**
+     * Set the read timeout for subsequent client requests.
+     * Value 0 represents infinity. Negative values are not allowed.
+     *
+     * @param read he maximum time to wait
+     * @param unit the time unit of the timeout argument
+     * @throws IllegalArgumentException - when the value is negative
+     */
+
+    void readTimeout(long read,  TimeUnit unit);
+    /**
      * Lookup active LRAs
      *
      * @return a list of active LRAs
