@@ -17,36 +17,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *******************************************************************************/
+package org.eclipse.microprofile.lra.client;
 
-package org.eclipse.microprofile.lra.participant;
-
-import org.eclipse.microprofile.lra.client.LRAId;
-
-/**
- * An exception used to report failures during enlistment of a participant in an LRA
- */
-public class JoinLRAException extends Exception {
-    private LRAId lraId;
-    private int statusCode;
-
-    /**
-     * @return the specific reason for why the enlistment failed
-     */
-    public int getStatusCode() {
-        return statusCode;
-    }
-
-    /**
-     * @return the LRA that join request related to
-     */
-    public LRAId getLraId() {
-        return lraId;
-    }
-
-    public JoinLRAException(LRAId lraId, int statusCode, String message, Throwable cause) {
-        super(String.format("%s: %s", lraId, message), cause);
-
-        this.lraId = lraId;
-        this.statusCode = statusCode;
-    }
+public class LRARequiredException extends RuntimeException {
+    // maps to 412 Precondition Failed HTTP status code
 }

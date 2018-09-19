@@ -17,36 +17,47 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *******************************************************************************/
+package org.eclipse.microprofile.lra.client;
 
-package org.eclipse.microprofile.lra.participant;
-
-import org.eclipse.microprofile.lra.client.LRAId;
+import java.io.Serializable;
+import java.util.Objects;
 
 /**
- * An exception used to report failures during enlistment of a participant in an LRA
+ * A globally uniue identity for an LRA
+ *
+ * Implementations should provide a toString implementation
+ * that uniquely identifies the LRA.
  */
-public class JoinLRAException extends Exception {
-    private LRAId lraId;
-    private int statusCode;
+public class LRAId implements Cloneable, Serializable {
+    private String stringForm;
 
-    /**
-     * @return the specific reason for why the enlistment failed
-     */
-    public int getStatusCode() {
-        return statusCode;
+    public LRAId(String stringForm) {
+        this.stringForm = stringForm;
     }
 
-    /**
-     * @return the LRA that join request related to
-     */
-    public LRAId getLraId() {
-        return lraId;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (!(o instanceof LRAId)) {
+            return false;
+        }
+
+        LRAId lraId = (LRAId) o;
+
+        return Objects.equals(stringForm, lraId.stringForm);
     }
 
-    public JoinLRAException(LRAId lraId, int statusCode, String message, Throwable cause) {
-        super(String.format("%s: %s", lraId, message), cause);
+    @Override
+    public int hashCode() {
 
-        this.lraId = lraId;
-        this.statusCode = statusCode;
+        return Objects.hash(stringForm);
+    }
+
+    @Override
+    public String toString() {
+        return stringForm;
     }
 }

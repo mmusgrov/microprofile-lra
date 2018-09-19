@@ -1,0 +1,223 @@
+//
+// Copyright (c) 2018 Eclipse Microprofile Contributors:
+// See overview.adoc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+[[long-running-actions]]
+= Eclipse MicroProfile LRA
+
+[[introduction]]
+== Introduction
+
+The proposal introduces APIs for services to coordinate activities.
+
+The main thrust of the proposal introduces an API for loosely coupled
+services to coordinate long running activities in such a way as to
+guarantee a globally consistent outcome without the need to take locks
+on data.
+
+[[motivation]]
+== Motivation
+
+In a loosely coupled service based environment there is sometimes a need
+for different services to provide consistency guarantees. Typical
+examples include:
+
+* order processing involving three services (take order, bill customer,
+ship product). If the shipping service finds that it is out of stock
+then the customer will have been billed with no prospect of receiving
+his item;
+* an airline overbooks a flight which means that the booking count and
+the flight capacity are inconsistent.
+
+There are various ways that systems overcome such inconsistency but it
+would be advantageous to provide a generic solution which handles
+failure conditions, maintains state for those flows that span long
+periods of time and ensures that remedial activities are called
+correctly.
+
+Traditional techniques for guaranteeing consistency in distributed
+environments has focused on XA transactions where locks may be held for
+long periods thereby introducing strong coupling between services and
+decreasing concurrency to unacceptable levels. Additionally, if such a
+transaction aborts then valuable work which may be valid will be rolled
+back. In view of these issues an alternative approach is desirable.
+
+Goals
+
+* support long running actions
+* no strong coupling between services
+* allow actions to finish early
+* allow nesting of actions to support structuring of work
+* allow compensating actions if a business activity is cancelled
+
+[[proposed-solution]]
+== The solution
+
+We propose a compensation based approach in which participants make
+changes visible but register a compensatory action which is performed if
+something goes wrong. We call the model LRA (short for Long Running
+Action) and is based on work done within the
+https://www.oasis-open.org/committees/tc_home.php?wg_abbrev=ws-caf[OASIS
+Web Services Composite Application Framework Technical Committee],
+namely
+https://www.oasis-open.org/committees/document.php?document_id=12794[Long
+Running Action transaction model], but updated to be more suited for use
+in microservice based architectures.
+
+In the LRA model, an activity reflects business interactions: all work
+performed within the scope of an activity is required to be
+compensatable. Therefore, an activity’s work is either performed
+successfully or undone. How services perform their work and ensure it
+can be undone if compensation is required are implementation choices and
+is not exposed to the LRA model which simply defines the triggers for
+compensation actions and the conditions under which those triggers are
+executed. In other words, an LRA coordinator is concerned only with
+ensuring participants obey the protocol necessary to make an activity
+compensatable (and the semantics of the business interactions are not
+part of the model). Issues such as isolation of services between
+potentially conflicting activities and durability of service work are
+assumed to be implementation decisions. The coordination protocol used
+to ensure an activity is completed successfully or compensated is not
+two-phase and is intended to better model interactions between
+microservices. Although this may result in non-atomic behaviour for the
+overall business activity, other activities may be started by the
+service to attempt to compensate in some other manner.
+
+In the model, an LRA is tied to the scope of an activity so that when
+the activity terminates the LRA coordination protocol will be
+automatically performed either to accept or to compensate the work. For
+example, when a user reserves a seat on a flight, the airline
+reservation centre may take an optimistic approach and actually book the
+seat and debit the user's account, relying on the fact that most of
+their customers who reserve seats later book them; the compensation
+action for this activity would be to un-book the seat and credit the
+user’s account.
+
+As in any business interaction, service activities may or may not be
+compensatable. Even the ability to compensate may be a transient
+capability of a service. A Compensator (or simply LRA participant) is
+the LRA participant that operates on behalf of a service to undo the
+work it performs within the scope of an LRA or to compensate for the
+fact that the original work could not be completed.
+
+[[the-model]]
+=== The Model
+
+The model concerns participants (aka Compensators) and a coordinator.
+A client starts a new LRA via a call to an LRA coordination service.
+This call creates a new LRA coordinator. When a business service does
+work that may have to be later compensated for within the scope of the
+LRA, it enlists a participant with the LRA coordinator. Subsequently
+the client closes or cancels the LRA via the coordinator which in turn
+tells all enlisted participants to either complete or compensate:
+
+:imagesdir: images
+image::lra.png[LRA Protocol Sequence]
+
+The lifecycle of an LRA
+
+The LRA participant will be invoked in the following way by the LRA
+coordinator when the activity terminates:
+
+* *Success*: the client has closed the LRA and the activity has completed
+successfully. If the activity is nested then participants may propagate
+themselves to the enclosing LRA. Otherwise the participants are informed
+that the activity has terminated and they can perform any necessary cleanup.
+* *Fail*: the client has cancelled the LRA and the activity has completed
+unsuccessfully. All participants
+that are registered with the LRA will be invoked to perform compensation
+in the reverse order. The coordinator forgets about all participants
+that indicated they operated correctly. Otherwise, compensation may be
+attempted again (possibly after a period of time) or alternatively a
+compensation violation has occurred and must be logged. Each service is
+required to log sufficient information in order to ensure (with best
+effort) that compensation is possible. Each participant or subordinate
+coordinator (in the case of nested LRA's) is responsible for ensuring
+that sufficient data is made durable in order to undo the LRA in the
+event of failures.
+
+Interposition and check pointing of state allow the system to drive a
+consistent view of the outcome and recovery actions taken, but allowing
+always the possibility that recovery isn’t possible and must be logged
+or flagged for the administrator.
+
+In a large scale environment or in the presence of long term failures,
+recovery may not be automatic and manual intervention may be necessary
+to restore an application’s consistency.
+
+Note that calling participants in reverse order does not guarantee that
+the compensation actions will be performed in strict sequential order
+since participants are allowed to indicate that the compensation is in
+progress and will complete at some future time. Furthermore a
+participant can indicate that it failed to compensate, or could be
+unavailable in which case it will be periodically retried (out of
+order).
+
+Participants follow a state model with the following states:
+
+* `Compensating`: a participant is currently compensating for the work
+that it performed during the LRA;
+* `Compensated`: a participant has successfully compensated for the work
+that it performed during the LRA.
+* `FailedToCompensate`: the participant was not able to compensate the
+work it did during the LRA (it MUST not forget this outcome until the
+coordinator sends it a forget message).
+* `Completing`: the participant is tidying up after being told to
+complete.
+* `Completed`: the participant has confirmed that it has finished
+tidying up.
+* `FailedToComplete`: the participant was unable to tidy-up (it MUST not
+forget this outcome until the coordinator sends it a forget message).
+
+:imagesdir: images
+[[participant-state-model]]
+image::lra-state-model.png[link="participant-state-model"]
+
+The LRA follows a similar state model:
+
+* `Compensating`: the LRA is currently being cancelled
+* `Compensated`: the LRA has successfully cancelled
+* `FailedToCompensate`: at least one participant was not able to
+compensate
+* `Completing`: the LRA is currently being closed
+* `Completed`: the LRA has closed
+* `FailedToComplete`: at least one participants was not able to complete
+
+Different usage patterns for LRA's are possible, for example LRA's may be
+used sequentially and/or concurrently, where the termination of one LRA
+signals the start of some other unit of work within an application.
+However, LRA's are units of compensatable work and an application may
+have as many such units of work operating simultaneously as it needs to
+accomplish its tasks. Furthermore, the outcome of work within LRA's may
+determine how other LRA's are terminated. An application can be
+structured so that LRA's are used to assemble units of compensatable work
+and then held in the active state while the application performs other
+work in the scope of different (concurrent or sequential) LRA's. Only
+when the right subset of work (LRA's) is arrived at by the application
+will that subset be confirmed; all other LRA's will be told to cancel
+(complete in a failure state).
+
+In the rest of this proposal we specify two different API's for
+controlling the lifecycle of and participation in LRA's and a third API
+for writing participants:
+
+1.  <<java-annotations-for-lras,Java Annotations for LRA's>> for controlling
+the lifecycle and membership of LRA's
+2.  <<lra-client-api,Client API>> for use with containers that do not use Java annotations
+3.  <<java-based-lra-participant-registration-api,Java based LRA participant registration API>>
+to support services that do support the use of CDI annotations.
+
+Finally there is a section that describes how different implementations of the specification can interoperate with each other.

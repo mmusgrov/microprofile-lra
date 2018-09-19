@@ -19,9 +19,8 @@
  *******************************************************************************/
 package org.eclipse.microprofile.lra.client;
 
-import javax.ws.rs.WebApplicationException;
-
-public class IllegalLRAStateException extends WebApplicationException {
+// should map to <code>412 Precondition Failed</code> HTTP status code
+public class IllegalLRAStateException extends RuntimeException {
     private final String lraId;
     private final String operation;
 

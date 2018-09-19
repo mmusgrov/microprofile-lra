@@ -28,6 +28,7 @@ import org.eclipse.microprofile.lra.annotation.Status;
 import org.eclipse.microprofile.lra.annotation.TimeLimit;
 import org.eclipse.microprofile.lra.client.IllegalLRAStateException;
 import org.eclipse.microprofile.lra.client.LRAClient;
+import org.eclipse.microprofile.lra.client.LRAHttpClient;
 import org.eclipse.microprofile.lra.tck.participant.model.Activity;
 import org.eclipse.microprofile.lra.tck.participant.service.ActivityService;
 
@@ -78,7 +79,7 @@ public class TimedParticipant {
     @Produces(MediaType.APPLICATION_JSON)
     @Status
     @LRA(LRA.Type.NOT_SUPPORTED)
-    public Response status(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) throws NotFoundException {
+    public Response status(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) throws NotFoundException {
         Activity activity = activityService.getActivity(lraId);
 
         if (activity.getStatus() == null) {
@@ -101,7 +102,7 @@ public class TimedParticipant {
     @Produces(MediaType.APPLICATION_JSON)
     @Complete
     @TimeLimit(limit = 100, unit = TimeUnit.MILLISECONDS)
-    public Response completeWork(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId, String userData) throws NotFoundException {
+    public Response completeWork(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId, String userData) throws NotFoundException {
         COMPLETED_COUNT.incrementAndGet();
 
         assert lraId != null;
@@ -131,7 +132,7 @@ public class TimedParticipant {
     @Produces(MediaType.APPLICATION_JSON)
     @Compensate
     @TimeLimit(limit = 100, unit = TimeUnit.MILLISECONDS)
-    public Response compensateWork(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId, String userData) throws NotFoundException {
+    public Response compensateWork(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId, String userData) throws NotFoundException {
         COMPENSATED_COUNT.incrementAndGet();
 
         assert lraId != null;
@@ -160,7 +161,7 @@ public class TimedParticipant {
     @Path("/forget")
     @Produces(MediaType.APPLICATION_JSON)
     @Forget
-    public Response forgetWork(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) { //throws NotFoundException {
+    public Response forgetWork(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) { //throws NotFoundException {
         COMPLETED_COUNT.incrementAndGet();
 
         assert lraId != null;
@@ -179,8 +180,8 @@ public class TimedParticipant {
     @Path(ACCEPT_WORK)
     @LRA(LRA.Type.REQUIRED)
     public Response acceptWork(
-            @HeaderParam(LRAClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
-            @HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {
+            @HeaderParam(LRAHttpClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
+            @HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) {
         assert lraId != null;
         Activity activity = addWork(lraId, rcvId);
 
@@ -212,7 +213,7 @@ public class TimedParticipant {
     @Produces(MediaType.APPLICATION_JSON)
     @TimeLimit(limit = 100, unit = TimeUnit.MILLISECONDS)
     @LRA(value = LRA.Type.REQUIRED)
-    public Response timeLimitRequiredLRA(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {
+    public Response timeLimitRequiredLRA(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) {
         activityService.add(new Activity(lraId));//NarayanaLRAClient.getLRAId(lraId)));
 
         try {
@@ -227,7 +228,7 @@ public class TimedParticipant {
     @Path(TIMELIMIT_SUPPRTS_RESOURCE_METHOD)
     @Produces(MediaType.APPLICATION_JSON)
     @LRA(value = LRA.Type.SUPPORTS)
-    public Response timeLimitSupportsLRA(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {
+    public Response timeLimitSupportsLRA(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) {
         activityService.add(new Activity(lraId));
 
         return Response.status(Response.Status.OK).entity(Entity.text("Simulate buisiness logic timeoout")).build();

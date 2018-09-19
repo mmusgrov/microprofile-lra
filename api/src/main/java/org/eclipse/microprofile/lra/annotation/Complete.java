@@ -20,6 +20,7 @@
 
 package org.eclipse.microprofile.lra.annotation;
 
+import javax.interceptor.InterceptorBinding;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -32,11 +33,8 @@ import java.lang.annotation.Target;
  *
  * If the associated LRA is subsequently closed the method on which this
  * annotation is present will be invoked.
- *
- * The annotation can be combined with {@link TimeLimit} annotation to limit
- * the time that the participant will be guaranteed to be able to complete.
- * If the timelimit is reached then annotated method will be invoked.
  */
+@InterceptorBinding
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD})
 public @interface Complete {

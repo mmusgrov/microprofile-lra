@@ -1,0 +1,320 @@
+//
+// Copyright (c) 2018 Eclipse Microprofile Contributors:
+// See overview.adoc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+= Java API Usage
+
+[[java-annotations-for-lras]]
+=== Java Annotations for LRAs
+
+Support for the proposal in MicroProfile is primarily based upon the use
+of Java annotations for controlling the lifecycle of LRAs and participants. The service developer annotates Java classes in order to specify how LRAs should be controlled and when to _enlist a class_ as a participant.
+
+[[java-annotations]]
+==== Java Annotations
+
+[[controlling-the-lifecycle-of-an-lra]]
+The lifecycle and propagation of LRAs is controlled by marking beans and methods with the <<source-LRA,LRA annotation>>. When an LRA is active it is identified by an id referred to as the LRA context. Services obtain the context via the LRAClient#getCurrent() API call or in a transport dependent manner (for example a JAX-RS implementation would expose the context using a JAX-RS header).
+
+==== LRA type attribute
+
+The Type element of the annotation indicates whether a bean method is to be executed within a compensatable transaction (aka LRA) context where the values provide the following behaviors:
+
+* REQUIRED: If called outside a LRA context then a new LRA will be started before the method is invoked and will remain active for the duration of the method call and when the call completes the LRA will be terminated. The method can cause the LRA to cancel by throwing an appropriate exception as defined in the LRA#cancelOn() attribute. If called inside a LRA context then that context will remain active during the method call.
+
+* REQUIRES_NEW: If called outside a LRA context the implementation will begin a new LRA for the duration of the method call and when the call completes the LRA will be automatically closed. If called inside a LRA context the implementation will suspend it and begin a new LRA for the duration of the method call and when the call completes the implementation will complete the LRA and resume the one that was active on entry to the method.
+
+* MANDATORY: If called outside a transaction context, the method call will throw a org.eclipse.microprofile.lra.client.LRARequiredException. If called inside a LRA context the bean method execution will then continue within that context.
+
+* SUPPORTS: If called outside a LRA context the bean method execution must then continue outside a LRA context. If called inside a LRA context the managed bean method execution must then continue inside this LRA context.
+
+* NOT_SUPPORTED: The bean method is executed without a LRA context. If a context is present on entry then it is suspended and then resumed after the execution has completed.
+
+ * NEVER: If called outside a LRA context the managed bean method execution must then continue outside a LRA context. If called inside a LRA context the method is not executed and a org.eclipse.microprofile.lra.client.InvalidLRAException is thrown.
+
+The type annotation should be sufficient for the majority of use cases but there are some additional attributes which provide finer grained control of the LRA:
+
+* Class[] cancelOn(): this element can be set to indicate which exception types will cause the LRA to cancel.
+
+* boolean delayClose(): Some annotations (such as REQUIRES_NEW) will start an LRA on entry to a method and end it on exit. However, for some business activities it is desirable for the action to survive method execution and be completed elsewhere (as defined by the terminal attribute).
+
+* boolean terminal(): Normally if an LRA is present when a bean method is entered it will remain active when the method returns. To override this behaviour and force LRA termination on exit use the terminal element. This attribute will typically be used in conjunction with the delayClose attribute.
+
+* boolean join(): If true (the default) then the annotated class will be checked for participant annotations (see the next section) and, when present, the bean class will be enlisted with any LRA that is associated with the invocation
+
+The following code snippet demonstrates how to start an LRA in one method and close it in a different method using the `delayClose` and `terminal` attributes. The `bookTrip` method will starts a new LRA (if one isn't already present) and completes it in the `confirmTrip` method):
+
+[source,java]
+----
+  @LRA(value = LRA.Type.REQUIRED,
+       delayClose = true) // the LRA remains active on method return
+  public Response bookTrip(...) { ... }
+
+  @LRA(LRA.Type.SUPPORTS,
+       terminal = true) // the LRA will be closed when the method ends
+  public Booking confirmTrip(Booking booking) throws BookingException { ... }
+----
+
+[[compensating-activities]]
+==== Compensating Activities
+
+As well as indicating when to start and end LRA and the application developer needs to provide completion and compensation callbacks that will be triggered when the LRA is closed or cancelled.
+
+Whenever a bean method is invoked in the context of an LRA the implementation should check for the presence of `@Compensate` and `@Complete` annotations on any methods and if any are found then the implementation will invoke the appropriate callback when the LRA is subsequently closed or cancelled. If more than one method is annotated then an arbitrary one will be chosen. 
+
+* @Compensate: When a bean method executes in the context of an LRA any methods in the bean class that are annotated with @Compensate will be used as a participant for that LRA. If the associated LRA is subsequently cancelled this method will be invoked. The annotation can be combined with @TimeLimit annotation to limit the time that the participant will be guaranteed to be able to compensate. If the timelimit is reached then annotated method will be invoked.
+
+* @Complete: When a bean method executes in the context of an LRA any methods in the bean class that are annotated with @Complete will be used as a participant for that LRA. If the associated LRA is subsequently closed the method on which this annotation is present will be invoked.
+
+* @LRAContext: Participants that have joined an LRA will need the LRA context in order to respond to @Compensate, @Complete, @Status and @Forget requests. Similarly, business logic annotated with the @LRA annotation may need to know whether or not they have been invoked with an active context. Methods marked with any of these annotations can obtain the context by providing a method parameter of type org.eclipse.microprofile.lra.client.LRAId markded with this @LRAContext annotation. Note that this is not the only way to obtain the current context. Other mechanisms include LRAClient#getCurrent() and transport specific techniques (for example a JAX-RS annotated resource it would be appropriate to inject it via a HeaderParam).
+
+* @Leave: If the annotated method is invoked in the context of an LRA then the bean will not participate in any completion or compensation callbacks.
+But do note that if any of the other resource methods are invoked again in the same LRA context it will rejoin the LRA.
+ 
+ * @Status: In order to support recovery participants must be able to report their status once the completion part of the protocol begins. Valid return values from methods marked with this annotation must match one of the enum names listed in CompensatorStatus enum type. If the participant has not yet been asked to complete or compensate it should throw org.eclipse.microprofile.lra.client.IllegalLRAStateException or return an empty or null String.
+ 
+ * @Forget: If a participant is unable to compensate it must remember the fact by reporting it's status via a method annotated with @Status. When the method annotated with @Forget is invoked the participant is allowed to forget about the LRA (ie it can perform any clean up activities).
+
+* @ParticipantData: Participants join LRAs by marking a bean method (or class) with the {@link LRA} annotation, indicating which methods to call during completion using the {@link Compensate} and {@link Complete} annotations. If any method in the bean is annotated with {@link ParticipantData} then the method will be called during registration time and any return value will be stored with the LRA coordinator. This data will be returned to the participant whenever any of the participant callbacks are invoked. The mechanism by which this data is passed to the particpant is specified in the protocol specific callbacks (for example, a JAX-RS praticipant will be given the data in the body of the request using MediaType.APPLICATION_JSON
+ 
+If there is an `@Compenstate` annotated method then the bean MAY also contain a method marked with the `@Complete`. If such a method is present then the LRA spec implementation MUST invoke the method when the associated LRA is closed. Typically the resource would use this call to perform any clean up actions. The method is optional since such clean up actions may not be necessary, for example consider an online store that takes provisional bookings which are automatically timed out if not confirmed within a predefined period.
+
+If the participant resource knows that it will never be able to compensate then the compensation method should throw a CompensationException. Similarly, if it will never be able to complete then a CompletionException should be thrown.
+
+If the participant cannot perform a compensation or completion activity
+immediately the termination method MUST indicate the condition. In this
+case the LRA coordinator will need to monitor the progress of the
+participant and the developer should either provide a `@GET` method
+annotated with `@Status` which must return a
+<<participant-state-model,string representation of the status>>
+or expect the participant to be called again (ie the method
+must be idempotent). The resource indicates that it cannot finish
+immediately by either
+
+* returning a `202 Accepted` HTTP status code or
+* the method is marked as a JAX-RS asynchronous method (using the
+`javax.ws.rs.container.Suspended` annotation).
+
+When the coordinator knows it has the final status it will inform the
+participant that it can clean up. The developer indicates which method
+to use for this purpose by annotating one of the methods with the JAX-RS
+`@DELETE` and the `@Forget` annotations. If the developer wishes to report
+the status using some other resource then it MAY provide a status
+URL in the response Location header of the complete/compensate endpoint
+invocation. If the developer has not provided a status URL then a warning
+is logged when the asynchronous termination method finishes.
+
+If the `@Compensate` or `@Complete` annotation is present on multiple methods
+then an arbitrary one is chosen. If the annotation is not accompanied by
+a JAX-RS `@PUT` annotation the error should be reported using a JAX-RS
+exception mapper that maps to a `412 Precondition Failed` HTTP status code.
+
+[[nesting-lras]]
+==== Nesting LRAs
+
+An activity can be scoped within an existing LRA using the `@NestedLRA`
+annotation. Invoking a method marked with this annotation will start a
+new LRA whose outcome depends upon whether the enclosing LRA is closed
+or cancelled.
+
+* If the nested LRA is closed but the outer LRA is cancelled then the
+participants registered with the nested LRA will be told to compensate.
+* If the nested LRA is cancelled the outer LRA can be still closed.
+
+Note that there is no annotation to directly cancel a closed nested LRA
+and the <<lra-client-api,Java LRAClient api>> must be
+used for this purpose if required.
+
+[[timing-out-lras-and-compensators]]
+==== Timing out LRAs and Participants
+
+The ability to compensate may be a transient capability of a service so
+participants (and LRAs) can be timed out. When the time limit is reached
+participants will be notified via their compensation.
+
+To set such a time limit use the `@TimeLimit` annotation, for example:
+
+[source,java]
+----
+  @GET
+  @Path("/doitASAP")
+  @Produces(MediaType.APPLICATION_JSON)
+  @TimeLimit(limit = 100, unit = TimeUnit.MILLISECONDS)
+  @LRA(value = LRA.Type.REQUIRED)
+  public Response theClockIsTicking(
+      @HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {...}
+----
+
+[[leaving-an-lra]]
+==== Leaving an LRA
+
+If a resource method annotated with `@Leave` is invoked in the context of
+a LRA and if the bean class has registered a participant with the active LRA
+it will be removed from the LRA just before the bean method is entered
+(and will not be asked to complete or compensate when the LRA is subsequently
+ended).
+
+[[reporting-the-status-of-a-participant]]
+==== Reporting the status of a participant
+
+As alluded to above, participants can provide a method for reporting the
+status of the participant by annotating one of the methods with the
+`@Status` annotation. The method is required when at least one the
+participant methods that is annotated with `@Compensate` or `@Complete`
+is not able to complete the task immediately. If the participant has not
+finished - ie. it has not yet been asked to `@Compensate` or `@Complete`
+it should report the error using a JAX-RS exception mapper that maps to
+a `412 Precondition Failed` HTTP status code (such as
+<<source-IllegalLRAStateException,IllegalLRAStateException>> or InvalidStateException).
+Otherwise the response entity must correspond to one of the
+<<source-ConpensatorStatus,ConpensatorStatus enum values (as reported by the enum `name()` method)>>
+
+Notice that the enum constants correspond to
+<<participant-state-model,participant state model>>
+
+[[forgetting-an-lra]]
+==== Forgetting an LRA
+
+If a participant is unable to complete or compensate immediately then it
+must remember the fact until explicitly told that it can clean up using
+the `@Forget` annotation. The method annotated with the `@Forget`
+annotation is a standard REST endpoint expected to be used with JAX-RS
+`@DELETE` annotation.
+
+[[failure-resilience]]
+==== Recovery Requirements
+
+This LRA specification provides guarantees of Atomicity, Consistency and Durability
+of work which places responsibilities on both spec implementors and application
+writers. Failure points include loss of contact with components managing the
+lifecycle of LRAs and of participants. Application writers need to know
+how to associated work with an LRA context so that the correct work
+can be compensated for even after JVM or node crashes.
+Likewise infrastructure components may become unavailable and state must
+survive system failures. The specification is not prescriptive about how
+an implementation achieves resiliency provided that it obeys the requirements
+of the spec as laid out in this document.
+
+[[lra-client-api]]
+=== LRA Client API
+
+For completeness the proposal supports clients that wish to directly
+control LRAs and participants. To support this class of user an instance of
+<<source-LRAClient,LRA Client API>>
+can be instantiated directly or injected if the client is using CDI. This
+interface gives developers complete programmatic control of LRAs.
+
+[[java-based-lra-participant-registration-api]]
+=== Java based LRA participant registration API
+
+If an application does not directly expose JAX-RS endpoints for
+compensation activities then participants can join an LRA directly using an instance of
+<<source-LRAManagement,LRAManagement>>
+This interface requires that a participant be a serializable java class conforming to the
+<<source-LRAParticipant,LRAParticipant interface>>
+To support the crash recovery requirements of this specification the application MAY provide
+a class that is capable of recreating a participant from its serialized form by registering an
+<<source-LRAParticipantDeserializer,LRAParticipantDeserializer interface>>
+This interface will be used during revovery to ask participants to complete or compensate.
+
+How the application obtains an LRAManagement instance is unspecified
+(but CDI injection could be an obvious choice).
+
+It is important to reiterate that participants must be serializable for this approach
+to work and that the need for the registration of deserializers is to support recovery
+scenarios where one or more components fail: the framework must guarantee that participants
+will still be triggered (the LRA protocol still provides the "all or
+nothing" guarantees that traditional transactions give). The
+deserializer provides a mechanism for the recovery component to recreate
+participants from their persistent form. Note that, in contrast to the
+JAX-RS based support, an installation must ensure that the java class
+definitions of `LRAParticipant`s be made available to the recovery system
+and that deserializers are registered as soon as the JVM hosting the original
+participants is started. An typical implementation might, for example, register
+a proxy participant on behalf of application registrations which knows how
+to communicate and listen for remote compensation requests.
+
+Serializable participants need to know how to contact the original
+business application in order to trigger compensation activities whereas
+the JAX-RS based solution need only persist resource paths which are likely
+to correspond to existing microservice endpoints. In other words, from
+an administrative and manageability point of view, it is desirable to
+use one of the other APIs such as the <<java-annotations-for-lras,Java
+Annotations for LRAs>>
+
+_An implementation might, for example, implement recovery by depending on an
+maven artifact that automatically starts up a proxy participant which
+listens for replay requests. For this to work the proxy must start up on
+the same endpoint or it must be told where the coordinator resides so
+that it can inform the coordinator of its new location: the way in which
+participants can report their location is not defined in this version of
+the specification but an example implementation might achieve the behaviour
+via an HTTP PUT operation on the `recovery URL`. If a service is restarted
+the classes for any previously registered participants must be on available
+on the classpath._
+
+[[appendix-1]]
+== Appendix 1: Selected Javadoc API Descriptions
+
+=== LRA Annotation
+[[source-LRA]]
+----
+include::{sourcedir}/org/eclipse/microprofile/lra/annotation/LRA.java[LRA]
+----
+<<<
+
+=== IllegalLRAStateException
+[[source-IllegalLRAStateException]]
+----
+include::{sourcedir}/org/eclipse/microprofile/lra/client/IllegalLRAStateException.java[IllegalLRAStateException]
+----
+<<<
+
+=== ConpensatorStatus
+[[source-ConpensatorStatus]]
+----
+include::{sourcedir}/org/eclipse/microprofile/lra/annotation/CompensatorStatus.java/[ConpensatorStatus]
+----
+<<<
+
+=== LRAClient
+[[source-LRAClient]]
+----
+include::{sourcedir}/org/eclipse/microprofile/lra/client/LRAClient.java[LRAClient]
+----
+<<<
+
+=== LRAManagement
+[[source-LRAManagement]]
+----
+include::{sourcedir}/org/eclipse/microprofile/lra/participant/LRAManagement.java[LRAManagement]
+----
+<<<
+
+=== LRAParticipant
+[[source-LRAParticipant]]
+----
+include::{sourcedir}/org/eclipse/microprofile/lra/participant/LRAParticipant.java[LRAParticipant]
+----
+<<<
+
+=== LRAParticipantDeserializer
+[[source-LRAParticipantDeserializer]]
+----
+include::{sourcedir}/org/eclipse/microprofile/lra/participant/LRAParticipantDeserializer.java[LRAParticipantDeserializer]
+----
+<<<
+

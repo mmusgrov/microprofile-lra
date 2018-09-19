@@ -27,8 +27,8 @@ import java.lang.annotation.Target;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Used on ({@link LRA} and {@link Compensate} annotations to indicate the
- * maximum time that the LRA or participant should remain active for.
+ * Used on ({@link LRA}, {@link Complete} and {@link Compensate} annotations to
+ * indicate the maximum time that the LRA or participant should remain active for.
  *
  * When applied at the class level the timeout applies to any method that
  * starts an LRA or registers a participant.

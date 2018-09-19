@@ -1,0 +1,412 @@
+//
+// Copyright (c) 2018 Eclipse Microprofile Contributors:
+// See overview.adoc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+=  Protocol
+
+== Abstract
+
+Caveat: *this document is provisional*
+
+This document defines a JAX-RS/HTTP mapping of the specification to ensure that LRAs and participants are addressable as JAX-RS endpoints and in particular it is expected that different implementations of this specification will need to be able to register participants with each other.
+
+== Guidelines
+
+Note that the force of these words is modified by the requirement level of the document in which they are used.
+
+1. MUST   This word, or the terms "REQUIRED" or "SHALL", mean that the
+  definition is an absolute requirement of the specification.
+
+2. MUST NOT   This phrase, or the phrase "SHALL NOT", mean that the
+  definition is an absolute prohibition of the specification.
+
+3. SHOULD   This word, or the adjective "RECOMMENDED", mean that there
+  may exist valid reasons in particular circumstances to ignore a
+  particular item, but the full implications must be understood and
+  carefully weighed before choosing a different course.
+
+4. SHOULD NOT   This phrase, or the phrase "NOT RECOMMENDED" mean that
+  there may exist valid reasons in particular circumstances when the
+  particular behavior is acceptable or even useful, but the full
+  implications should be understood and the case carefully weighed
+  before implementing any behavior described with this label.
+
+5. MAY – This word, or the adjective “OPTIONAL,” mean that an item is truly discretionary.
+
+
+== Goals
+
+* MUST define how participants can register with any LRA
+* SHOULD define how one implementation can end an LRA created by a different implementation
+
+== Terms used
+
+|===
+| Term       | Description
+| LRA
+| The coordinator for a Long Running Action
+
+| LRA Context
+| The LRA that is active during a JAX-RS/service invocation. On JAX-RS calls the implementation must expose the context via a header.
+
+| Participant
+| An entity that provides protocol endpoints that will be notified when an LRA is terminating
+
+| Client
+| The entity that begins or ends an LRA
+|===
+
+== Protocol Overview
+
+1. A client begins a new LRA
+2. A service invocation is made in the context of the LRA
+3. A service joins the LRA as a particpant
+4. Steps 2 and 3 can repeat for an arbitrary number of services
+5. The client closes/cancels the LRA
+6. The LRA coordinator issues complete/compensate invocations on each service that joined the LRA
+7. For those particpants that were unable to complete immediately, the LRA coordinator periodically asks for the status.
+
+=== Protocol Specifics
+This section describes the specifics of the HTTP protocol usage.
+
+==== Protocol URLs
+
+===== LRA Coordinator URL
+
+It is expected that each implementation is responsible for begining and ending their own LRAs but it is a requirement that any implementation can register participants with any LRA coordinator. The LRA Coordinator is represented as a URL and is propagated between services using an HTTP header (called `Long-Running-Action`). Services use this URL to register participation in the protocol.
+
+===== Joining an LRA
+
+Once a resource has the LRA context, it can register for participation in the LRA (ie enlist as a participant). It does so by providing endpoints for completing or compensating for the action and, optionally for leaving an LRA, reporting the status and for being notified that it can clean up and forget about this LRA.
+
+We call these endpoints the `compensation`, `completion`, `leave`, `status` and `forget` URLs and they have the following semantics:
+
+   - PUT `completion URL` tells the participant to enter the termination
+     phase and  complete the action;
+   - PUT `compensatation URL` tells the participant to enter the termination
+     phase and  compensate for the action;
+   - PUT `leave URL` causes the participant to leave this LRA (ie to not participate in the LRA termination phase);
+   - GET `status URL` asks the participant to report its' status;
+   - DELETE `forget URL` tells the participant that it can clean up and
+     forget about the LRA.
+
+The URLs must be unique within the context of a given LRA.
+
+Typically the status and forget URLs will be the same URL.
+If the forget URL is not provided then the status URL will be used in its place.
+The status and forget URLs are only required if the participant cannot
+finish immediately or if the coordinator is unable to determine the
+status (because of network failures, for example). They can be provided
+at [registration time](#participant-registration) or at
+[termination time](#participant-completion).
+
+The drawback of providing the status URL during participant completion
+or compensation is that there is a possibility that the response does
+not reach the coordinator and, without the status URL, the only recourse
+is for the coordinator to retry the completion phase in which case the
+complete and compensate URLs MUST be idempotent operations (as is normal
+for `PUT` requests). To avoid this requirement for idempotency the
+status URL must be provided at enlistment time.
+
+The participant joins an LRA using a PUT request with an HTTP Link header (IETF RFC 5988):
+       
+```
+         Link: <participant URL>; rel="participant",
+               <completion URL>; rel="complete",
+               <compensatation URL>; rel="compensate",
+               <status URL>; rel="status",
+               <forget URL>; rel="forget"
+```
+   As mentioned earlier, the status URL will only be used if coordinator
+   looses track of the participant status.
+
+   Notice that the participant is free to use different URLs
+   for each endpoint (ie there is nothing to force them to be on the
+   same server, for example).
+
+When registering via a Link header, the body of the registration request,
+if present, is remembered and returned back to the participant when the
+LRA is closed or cancelled. This feature can
+be used by participants for reliably storing data which may be helpful
+to the participant for deciding how to complete or compensate for an
+action. In particular, the data survives JVM failures. 
+
+If the registration is successful a `recovery coordinator URL` is
+returned in the `Location` response header and the body.
+The `recovery coordinator URL` supports the following behaviour:
+
+   - performing a GET on it will return the original `participant URL`;  
+   - performing a PUT on it will overwrite the old `participant URL`
+     with the new one supplied. If the participant is in need of recovery
+     then this operation will trigger a recovery attempt (ie the 
+     participant will be asked ot either compensate or complete depending
+     on whether the LRA was cancelled or closed);
+   - performing a DELETE, HEAD or POST will return a `401 Unauthorized`;
+   
+It is expected that specification implementors durably record which
+participants are enlisted in an LRA in order to guarantee that the
+LRA can make progress in failure recovery scenarios (otherwise the
+"all or nothing" nature of the model could not be guaranteed).
+
+When a participant is registered with a LRA, the entity performing the
+registration can supply a number of query strings (for example `{participant
+URL}?TimeLimit=300`) which may be used by the coordinator and business
+application to influence the overall outcome of the activity. The currently
+supported query strings are:
+
+   * `TimeLimit`: the time limit (in milliseconds, although the java
+     annotation based support makes the unit configurable) that the
+     participant can guarantee that it can compensate the work performed
+     by the service. After this time period has elapsed, it may no longer
+     be possible to undo the work within the scope of this (or any
+     enclosing) LRA and the compensate URL will be invoked. It may
+     therefore be necessary for the application or service to start
+     other activities to explicitly try to compensate this work. The
+     application or coordinator may use this information to control the
+     lifecycle of a LRA.
+
+===== Participant Completion
+
+The participant is expected to respond to termination requests using the standard LRA annotations descibed elsewhere in this specification (@Compensate, @Complete, @Status and @Forget). To recap, valid response codes from the participant to compensate or complete callbacks are:
+
+   1. `204 No Content` and no body
+      to indicate that the participant finished successfully.
+      The participant can assume that it can clean up.
+      If subsequently asked again to finish it should return
+      `404 Not Found` in which case the coordinator assumes that
+      the participant must have previously terminated successfully.
+   2. `202 Accepted` if it cannot terminate immediately
+      and the coordinator should monitor the eventual outcome via
+      the `status URL`
+      The participant MAY include a `status` URL in the `Location`
+      header which, if present, will be used in place of any existing
+      participant status and forget URLs provided at enlistment time.
+      If the coordinator does not get the response and does not have
+      a status URL it will periodically retry the completion request.
+      And if the coordinator does not have the status URL because
+      the participant never provided one then it will mark the
+      participant as permanently failed (ie returning 202 and not
+      providing a status URL is unsafe).
+   3. `200 OK` with a content body
+      to indicate that the participant could not finish. The content
+      should contain the status string `FailedToCompensate` (if asked
+      to compensate) or `FailedToComplete` (if asked to complete).
+      The coordinator will log the participant as failed and no longer
+      make requests to it.
+
+If the coordinator receives any other response codes it will
+periodically ask for the status or retry the completion if it does not
+have a status URL.
+
+If the participant replies with `410 Gone` or `404 Not Found`
+it can be assumed by the coordinator that the participant has finished
+successfully (ie completed if it was asked to complete and compensated
+if it was asked to compensate).
+
+Note that if a participant cannot complete or compensate it must be able
+to report the status until it is told to forget via a `DELETE` request to
+status URL.
+
+===== Reporting the Participant Status
+
+A participant reports its status by a method marked with the @Status annotation. To recap, methods marked with the @Status annotation respond to `GET` requests and the method will return the [current status](#participant-state-model) of the participant in the
+response body, or `404 Not Found` if the participant is no longer present
+or `412 Precondition Failed` if the participant has not yet been asked to
+complete or compensate.
+
+If a participants' status is reported as `FailedToCompensate` or
+`FailedToComplete` the coordinator SHOULD log the condition and
+mark it as permanently failed. It SHOUILD then issue an HTTP `DELETE`
+request to the forget URL. On success the coordinator forgets about 
+the participant (ie it will no longer send any further requests to the
+participant). If the `DELETE` request fails, the recovery system will
+periodically replay delete request.
+
+If a participants' status is reported as `Compensated` or `Completed`
+then the coordinator will forget about the participant (ie will
+no longer send requests to it).
+
+If the coordinator believes that a participants' status is
+`Compensating` or `Completing` the recovery system will periodically
+retry the complete or compensate requests until it receives a different
+status. A participant is placed in this state if:
+
+   - the compensate or complete response was anything other than
+     `200 OK`
+   - the participant reports that that is what its status is.
+
+===== JAX-RS Requirements and Examples
+
+The following code snippet demonstrates how to start an LRA in one method and close
+it in a different method:
+
+[source,java]
+----
+  @POST
+  @Path("/book")
+  @Produces(MediaType.APPLICATION_JSON)
+  @LRA(value = LRA.Type.REQUIRED,
+       delayClose = true) // the LRA will continue to run when the method finishes
+  public Response bookTrip(...) { ... }
+
+  @PUT
+  @Path("/confirm")
+  @Produces(MediaType.APPLICATION_JSON)
+  @Consumes(MediaType.APPLICATION_JSON)
+  @LRA(LRA.Type.SUPPORTS,
+       terminal = true) // the confirmation should trigger the closing of the LRA started in the bookTrip bean method
+  public Booking confirmTrip(Booking booking) throws BookingException { ... }
+----
+
+When an LRA is present it MUST be made available to the business logic
+via <<source-LRA,request and response headers>> for example
+
+[source,java]
+----
+  @PUT
+  @Path("/confirm")
+  @Produces(MediaType.APPLICATION_JSON)
+  @LRA(LRA.Type.SUPPORTS, terminal = true)
+  public Booking confirmTrip(
+      @HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) { ... }
+----
+
+[[compensating-activities]]
+==== Compensating Activities
+
+The application developer indicates which JAX-RS method to use for a compensating
+activity by annotating it with both the `@Compensate` the JAX-RS
+`@PUT` annotations. Whenever the associated resource is invoked in the context of
+an LRA the endpoint corresponding to the `@Compensate` method MUST be enlisted with
+the LRA. If the LRA is subsequently cancelled the compensation method MUST be invoked
+by the LRA coordinator. For example:
+
+[source,java]
+----
+  @PUT
+  @Path("/compensate")
+  @Produces(MediaType.APPLICATION_JSON)
+  @Compensate
+  public Response compensateWork(
+      @HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {
+    // compensate for whatever activity the business logic has associated with lraId
+  }
+----
+
+The resource class MAY also contain a method marked with the `@Complete` and the
+JAX-RS `@PUT` annotations. If such a method is present then the LRA
+coordinator MUST invoke the method when the associated LRA is closed.
+Typically the resource would use this call to perform any clean up actions. The
+method is optional since such clean up actions may not be necessary, for example
+consider an online store that takes provisional bookings which are automatically
+timed out if not confirmed within a predefined period.
+
+If the participant resource knows that it will never be able to compensate
+then the activity SHOULD return a `200 OK` status code and content body
+with the literal string `FailedToCompensate`. If it returns any other
+content the coordinator will call the JAX-RS endpoint declared by the
+`@Status` method to obtain the status. If the `@Status` method is not
+present the condition SHOULD be logged and this participant will be
+dropped by the coordinator (ie the participant should avoid this
+circumstance). Similar remarks apply if the resource method knows that it
+will never be able to complete.
+
+If the resource cannot perform a compensation or completion activity
+immediately the termination method MUST indicate the condition. In this
+case the LRA coordinator will need to monitor the progress of the
+participant and the developer should either provide a `@GET` method
+annotated with `@Status` which must return a
+<<participant-state-model,string representation of the status>>
+or expect the participant to be called again (ie the method
+must be idempotent). The resource indicates that it cannot finish
+immediately by either
+
+* returning a `202 Accepted` HTTP status code or
+* the method is marked as a JAX-RS asynchronous method (using the
+`javax.ws.rs.container.Suspended` annotation).
+
+When the coordinator knows it has the final status it will inform the
+participant that it can clean up. The developer indicates which method
+to use for this purpose by annotating one of the methods with the JAX-RS
+`@DELETE` and the `@Forget` annotations. If the developer wishes to report
+the status using some other resource then it MAY provide a status
+URL in the response Location header of the complete/compensate endpoint
+invocation. If the developer has not provided a status URL then a warning
+is logged when the asynchronous termination method finishes.
+
+If the `@Compensate` or `@Complete` annotation is present on multiple methods
+then an arbitrary one is chosen. If the annotation is not accompanied by
+a JAX-RS `@PUT` annotation the error should be reported using a JAX-RS
+exception mapper that maps to a `412 Precondition Failed` HTTP status code.
+
+[[timing-out-lras-and-compensators]]
+==== Timing out LRAs and Participants
+
+The ability to compensate may be a transient capability of a service so
+participants (and LRAs) can be timed out. When the time limit is reached
+participants will be notified via their compensation.
+
+To set such a time limit use the `@TimeLimit` annotation, for example:
+
+[source,java]
+----
+  @GET
+  @Path("/doitASAP")
+  @Produces(MediaType.APPLICATION_JSON)
+  @TimeLimit(limit = 100, unit = TimeUnit.MILLISECONDS)
+  @LRA(value = LRA.Type.REQUIRED)
+  public Response theClockIsTicking(
+      @HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {...}
+----
+
+[[reporting-the-status-of-a-participant]]
+==== Reporting the status of a participant
+
+As alluded to above, participants can provide a method for reporting the
+status of the participant by annotating one of the methods with the
+`@Status` annotation. The method is required when at least one the
+participant methods that is annotated with `@Compensate` or `@Complete`
+is not able to complete the task immediately. If the participant has not
+finished - ie. it has not yet been asked to `@Compensate` or `@Complete`
+it should report the error using a JAX-RS exception mapper that maps to
+a `412 Precondition Failed` HTTP status code (such as
+<<source-IllegalLRAStateException,IllegalLRAStateException>> or InvalidStateException).
+Otherwise the response entity must correspond to one of the
+<<source-ConpensatorStatus,ConpensatorStatus enum values (as reported by the enum `name()` method)>>
+
+Notice that the enum constants correspond to
+<<participant-state-model,participant state model>>
+
+[[forgetting-an-lra]]
+==== Forgetting an LRA
+
+If a participant is unable to complete or compensate immediately then it
+must remember the fact until explicitly told that it can clean up using
+the `@Forget` annotation. The method annotated with the `@Forget`
+annotation is a standard REST endpoint expected to be used with JAX-RS
+`@DELETE` annotation.
+
+== Security
+
+== Appendix A: REST interface specifications
+
+|===
+| Context       | Verb          | Status Code  | Response
+|===
+
+=== Response Codes and status mappings
+
+=== JSON Schema:

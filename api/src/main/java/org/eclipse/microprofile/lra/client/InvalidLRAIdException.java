@@ -19,9 +19,7 @@
  *******************************************************************************/
 package org.eclipse.microprofile.lra.client;
 
-import javax.ws.rs.WebApplicationException;
-
-public class InvalidLRAIdException extends WebApplicationException {
+public class InvalidLRAIdException extends RuntimeException {
     private final String lraId;
 
     /**

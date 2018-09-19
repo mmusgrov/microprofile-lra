@@ -20,15 +20,16 @@
 
 package org.eclipse.microprofile.lra.participant;
 
+import org.eclipse.microprofile.lra.client.LRAId;
+
 import javax.ws.rs.NotFoundException;
 import java.io.Serializable;
-import java.net.URL;
 import java.util.concurrent.Future;
 
 /**
  * The API for notifying participants that a LRA is completing or cancelling.
  * A participant joins with an LRA via a call to
- * {@link LRAManagement#joinLRA(LRAParticipant, URL, Long,
+ * {@link LRAManagement#joinLRA(LRAParticipant, LRAId, Long,
  * java.util.concurrent.TimeUnit)}
  */
 public interface LRAParticipant extends Serializable {
@@ -45,7 +46,7 @@ public interface LRAParticipant extends Serializable {
      * @throws TerminationException the participant was unable to complete and will
      *         never be able to do so
      */
-    Future<Void> completeWork(URL lraId)
+    Future<Void> completeWork(LRAId lraId)
             throws NotFoundException, TerminationException;
 
     /**
@@ -61,7 +62,7 @@ public interface LRAParticipant extends Serializable {
      * @throws TerminationException the participant was unable to complete and
      *         will never be able to do so
      */
-    Future<Void> compensateWork(URL lraId)
+    Future<Void> compensateWork(LRAId lraId)
             throws NotFoundException, TerminationException;
 }
 

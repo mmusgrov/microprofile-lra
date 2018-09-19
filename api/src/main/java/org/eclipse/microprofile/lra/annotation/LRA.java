@@ -20,7 +20,10 @@
 
 package org.eclipse.microprofile.lra.annotation;
 
-import javax.ws.rs.core.Response;
+import org.eclipse.microprofile.lra.client.LRAClient;
+
+import javax.enterprise.util.Nonbinding;
+import javax.interceptor.InterceptorBinding;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
@@ -31,19 +34,15 @@ import java.lang.annotation.Target;
  * An annotation for controlling the lifecycle of Long Running Actions (LRAs).
  *
  * Newly created LRAs are uniquely identified and the id is referred to as the
- * LRA context. The context is passed around using a JAX-RS request/response header
- * called {@link org.eclipse.microprofile.lra.client.LRAClient#LRA_HTTP_HEADER}.
- * The implementation (of the LRA specification) is expected to manage this context
- * and the application developer is expected to declaratively control the creation,
- * propagation and destruction of LRAs using the @LRA annotation. When a JAX-RS bean
- * method is invoked in the context of an LRA any JAX-RS client requests that it
- * performs will carry the same header so that the receiving resource knows that it
- * is inside an LRA context (typically achieved using JAX-RS client filters).
+ * LRA context. Services can obttain the context via the {@link LRAClient#getCurrent()}
+ * API call or in a transport dependent manner (for example a JAX-RS implementation
+ * would expose the context using a JAX-RS header).
  *
- * Resource methods can access the context id, if required, by injecting it via
- * the JAX-RS @HeaderParam annotation. This may be useful, for example, for
- * associating business work with an LRA.
+ * The implementation (of the LRA specification) is expected to manage the context
+ * and the application developer is expected to declaratively control the creation,
+ * propagation and destruction of LRAs using the @LRA annotation.
  */
+@InterceptorBinding
 @Inherited
 @Retention(value = RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.METHOD})
@@ -63,27 +62,32 @@ public @interface LRA {
      */
     enum Type {
         /**
-         *  If called outside a LRA context a JAX-RS filter will begin a new
-         *  LRA for the duration of the method call and when the call completes
-         *  another JAX-RS filter will complete the LRA.
+         *  If called outside a LRA context then a new LRA will be started before
+         *  the method is invoked and will remain active for the duration of the
+         *  method call and when the call completes the LRA will be terminated.
+         *  The method can cause the LRA to cancel by throwing an appropriate
+         *  exception as defined in the {@link LRA#cancelOn()} attributed.
+         *
+         *  If called inside a LRA context then that context will remain active
+         *  during the method call.
          */
         REQUIRED,
 
         /**
-         *  If called outside a LRA context a JAX-RS filter will begin a new
+         *  If called outside a LRA context the implementation will begin a new
          *  LRA for the duration of the method call and when the call completes
-         *  another JAX-RS filter will complete the LRA.
+         *  the LRA will be automatically closed.
          *
-         *  If called inside a LRA context a JAX-RS filter will suspend it and
+         *  If called inside a LRA context the implementation will suspend it and
          *  begin a new LRA for the duration of the method call and when the call
-         *  completes another JAX-RS filter will complete the LRA and resume the
+         *  completes the impelmentation will complete the LRA and resume the
          *  one that was active on entry to the method.
          */
         REQUIRES_NEW,
 
         /**
-         *  If called outside a transaction context, the method call will return
-         *  with a 412 Precondition Failed HTTP status code
+         *  If called outside a transaction context, the method call will throw a
+         *  {@link org.eclipse.microprofile.lra.client.LRARequiredException}
          *
          *  If called inside a transaction context the bean method execution will
          *  then continue within that context.
@@ -111,8 +115,8 @@ public @interface LRA {
          *  must then continue outside a LRA context.
          *
          *  If called inside a LRA context the method is not executed and a
-         *  <code>412 Precondition Failed</code> HTTP status code is returned
-         *  to the caller.
+         *  {@link org.eclipse.microprofile.lra.client.InvalidLRAException}
+         *  is thrown.
          */
         NEVER
     }
@@ -147,23 +151,11 @@ public @interface LRA {
     boolean join() default true;
 
     /**
-     * The cancelOnFamily element can be set to indicate which families of
-     * HTTP response codes will cause the LRA to cancel. By default client
-     * errors (4xx codes) and server errors (5xx codes) will result in
-     * cancellation of the LRA.
+     * The cancelOn element can be set to indicate which exception types
+     * will cause the LRA to cancel.
      *
-     * @return the {@link Response.Status.Family} families that will cause
-     * cancellation of the LRA
+     * @return the exception types that cause cancellation of the LRA
      */
-    Response.Status.Family[] cancelOnFamily() default {
-    };
-
-    /**
-     * The cancelOn element can be set to indicate which  HTTP response
-     * codes will cause the LRA to cancel
-     *
-     * @return the {@link Response.Status} HTTP status codes that will cause
-     * cancellation of the LRA
-     */
-    Response.Status [] cancelOn() default {};
+    @Nonbinding
+    Class[] cancelOn() default {};
 }
