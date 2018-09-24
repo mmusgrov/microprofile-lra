@@ -20,8 +20,9 @@
 
 package org.eclipse.microprofile.lra.participant;
 
+import org.eclipse.microprofile.lra.client.LRAId;
+
 import javax.enterprise.context.ApplicationScoped;
-import java.net.URL;
 import java.util.concurrent.TimeUnit;
 
 @ApplicationScoped
@@ -43,7 +44,7 @@ public interface LRAManagement {
      * {@link JoinLRAException#getCause()} and/or
      * {@link JoinLRAException#getStatusCode()} may provide a more specific reason
      */
-    String joinLRA(LRAParticipant participant, URL lraId, Long timeLimit,
+    String joinLRA(LRAParticipant participant, LRAId lraId, Long timeLimit,
                    TimeUnit unit)
             throws JoinLRAException;
 
@@ -63,7 +64,7 @@ public interface LRAManagement {
      * {@link JoinLRAException#getCause()} and/or
      * {@link JoinLRAException#getStatusCode()} may provide a more specific reason
      */
-    String joinLRA(LRAParticipant participant, URL lraId) throws JoinLRAException;
+    String joinLRA(LRAParticipant participant, LRAId lraId) throws JoinLRAException;
 
     /**
      * Register an object for recreating participants during recovery. Use this

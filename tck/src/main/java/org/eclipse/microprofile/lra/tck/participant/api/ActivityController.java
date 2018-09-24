@@ -24,14 +24,18 @@ import org.eclipse.microprofile.lra.annotation.CompensatorStatus;
 import org.eclipse.microprofile.lra.annotation.Complete;
 import org.eclipse.microprofile.lra.annotation.Forget;
 import org.eclipse.microprofile.lra.annotation.LRA;
+import org.eclipse.microprofile.lra.annotation.LRAContext;
 import org.eclipse.microprofile.lra.annotation.Leave;
 import org.eclipse.microprofile.lra.annotation.NestedLRA;
 import org.eclipse.microprofile.lra.annotation.Status;
 import org.eclipse.microprofile.lra.annotation.TimeLimit;
 import org.eclipse.microprofile.lra.client.GenericLRAException;
 import org.eclipse.microprofile.lra.client.IllegalLRAStateException;
-import org.eclipse.microprofile.lra.client.InvalidLRAIdException;
+import org.eclipse.microprofile.lra.client.InvalidLRAException;
 import org.eclipse.microprofile.lra.client.LRAClient;
+import org.eclipse.microprofile.lra.client.http.LRAHttpClient;
+import org.eclipse.microprofile.lra.client.LRAId;
+import org.eclipse.microprofile.lra.client.http.LRAUrl;
 import org.eclipse.microprofile.lra.tck.participant.model.Activity;
 import org.eclipse.microprofile.lra.tck.participant.service.ActivityService;
 
@@ -122,7 +126,7 @@ public class ActivityController {
     @Produces(MediaType.APPLICATION_JSON)
     @Status
     @LRA(LRA.Type.SUPPORTS) // remark: the status and forget methods should not start new LRAs
-    public Response status(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) throws NotFoundException {
+    public Response status(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) throws NotFoundException {
         Activity activity = activityService.getActivity(lraId);
 
         if (activity.getStatus() == null) {
@@ -154,7 +158,7 @@ public class ActivityController {
             // TODO this encoding of LRA URIs will be Narayana specific
             Map<String, String> terminateURIs =
                     Util.getTerminationUris(this.getClass(), context.getBaseUri());
-            lraClient.leaveLRA(new URL(lraUrl), terminateURIs.get("Link"));
+            lraClient.leaveLRA(new LRAUrl(new URL(lraUrl)), terminateURIs.get("Link"));
 
             activityService.getActivity(lraUrl);
 
@@ -170,7 +174,7 @@ public class ActivityController {
     @Path(LEAVE_RESOURCE_METHOD)
     @Produces(MediaType.APPLICATION_JSON)
     @Leave
-    public Response leaveWork(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) throws NotFoundException {
+    public Response leaveWork(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) throws NotFoundException {
         if (lraId != null) {
             activityService.getActivity(lraId);
 
@@ -186,7 +190,7 @@ public class ActivityController {
     @Path(COMPLETE_RESOURCE_METHOD)
     @Produces(MediaType.APPLICATION_JSON)
     @Complete
-    public Response completeWork(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId, String userData) throws NotFoundException {
+    public Response completeWork(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId, String userData) throws NotFoundException {
         COMPLETED_COUNT.incrementAndGet();
 
         assert lraId != null;
@@ -215,7 +219,7 @@ public class ActivityController {
     @Path(COMPENSATE_RESOURCE_METHOD)
     @Produces(MediaType.APPLICATION_JSON)
     @Compensate
-    public Response compensateWork(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId, String userData) throws NotFoundException {
+    public Response compensateWork(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId, String userData) throws NotFoundException {
         COMPENSATED_COUNT.incrementAndGet();
 
         assert lraId != null;
@@ -245,7 +249,7 @@ public class ActivityController {
     @Produces(MediaType.APPLICATION_JSON)
     @Forget
     @LRA(LRA.Type.SUPPORTS) // remark: the status and forget methods should not start new LRAs
-    public Response forgetWork(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) { //throws NotFoundException {
+    public Response forgetWork(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) { //throws NotFoundException {
         COMPLETED_COUNT.incrementAndGet();
 
         assert lraId != null;
@@ -266,8 +270,8 @@ public class ActivityController {
     @Path(ACCEPT_WORK_RESOURCE_METHOD)
     @LRA(LRA.Type.REQUIRED)
     public Response acceptWork(
-            @HeaderParam(LRAClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
-            @HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {
+            @HeaderParam(LRAHttpClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
+            @HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) {
         assert lraId != null;
         Activity activity = addWork(lraId, rcvId);
 
@@ -282,7 +286,7 @@ public class ActivityController {
     @PUT
     @Path(SUPPORTS_RESOURCE_METHOD)
     @LRA(LRA.Type.SUPPORTS)
-    public Response supportsLRACall(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {
+    public Response supportsLRACall(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) {
         assert lraId != null;
         addWork(lraId, null);
 
@@ -292,13 +296,18 @@ public class ActivityController {
     @PUT
     @Path(START_VIA_API_RESOURCE_METHOD)
     @LRA(LRA.Type.NOT_SUPPORTED)
-    public Response subActivity(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {
+    public Response subActivity(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) {
         if (lraId != null) {
             throw new WebApplicationException(Response.Status.NOT_ACCEPTABLE);
         }
 
         // manually start an LRA via the injection LRAClient api
-        URL lra = lraClient.startLRA("subActivity", 0L, TimeUnit.SECONDS);
+        LRAId lra = lraClient.startLRA("subActivity", 0L, TimeUnit.SECONDS);
+
+        if (!(lra instanceof LRAUrl)) {
+            throw new WebApplicationException("This TCK requires a JAX-RS implementation",
+                    Response.Status.NOT_IMPLEMENTED);
+        }
 
         lraId = lra.toString();
 
@@ -307,7 +316,7 @@ public class ActivityController {
         // invoke a method that SUPPORTS LRAs. The filters should detect the LRA we just started via the injected client
         // and add it as a header before calling the method at path /supports (ie supportsLRACall()).
         // The supportsLRACall method will return LRA id in the body if it is present.
-        String id = restPutInvocation(lra, SUPPORTS_RESOURCE_METHOD, "");
+        String id = restPutInvocation((LRAUrl) lra, SUPPORTS_RESOURCE_METHOD, "");
 
         // check that the invoked method saw the LRA
         if (id == null || !lraId.equals(id)) {
@@ -320,11 +329,13 @@ public class ActivityController {
     @PUT
     @Path(WORK_RESOURCE_METHOD)
     @LRA(LRA.Type.REQUIRED)
-    public Response activityWithLRA(@HeaderParam(LRAClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
-                                    @HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId,
+    public Response activityWithLRA(@HeaderParam(LRAHttpClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
+                                    @HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId,
+                                    @LRAContext String injectedLraId,
                                     @QueryParam("how") String how,
                                     @QueryParam("arg") String arg) {
         assert lraId != null;
+        assert lraId.equals(injectedLraId);
         Activity activity = addWork(lraId, rcvId);
 
         activity.setHow(how);
@@ -335,7 +346,7 @@ public class ActivityController {
 
     @PUT
     @Path(END_TEST_RESOURCE_METHOD)
-    @LRA(LRA.Type.REQUIRED)
+    @LRA(LRA.Type.SUPPORTS)
     public Response cleanUp(@QueryParam("how") String how, @QueryParam("arg") String arg) {
         activityService.findAll().forEach(activity -> activityService.remove(activity));
 
@@ -345,21 +356,21 @@ public class ActivityController {
     @PUT
     @Path(MANDATORY_LRA_RESOURCE_PATH)
     @LRA(LRA.Type.MANDATORY)
-    public Response activityWithMandatoryLRA(@HeaderParam(LRAClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
-                                    @HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId,
+    public Response activityWithMandatoryLRA(@HeaderParam(LRAHttpClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
+                                    @HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId,
                                     @QueryParam("how") String how,
                                     @QueryParam("arg") String arg) {
-        return activityWithLRA(rcvId, lraId, how, arg);
+        return activityWithLRA(rcvId, lraId, lraId, how, arg);
     }
 
-    private String restPutInvocation(URL lraURL, String path, String bodyText) {
+    private String restPutInvocation(LRAUrl lraURL, String path, String bodyText) {
         String id = null;
         Response response = ClientBuilder.newClient()
             .target(context.getBaseUri())
             .path("activities")
             .path(path)
             .request()
-            .header(LRAClient.LRA_HTTP_HEADER, lraURL)
+            .header(LRAHttpClient.LRA_HTTP_HEADER, lraURL)
             .put(Entity.text(bodyText));
 
         if (response.hasEntity()) {
@@ -375,8 +386,8 @@ public class ActivityController {
     @Path(NESTED_ACTIVITY_RESOURCE_METHOD)
     @LRA(LRA.Type.MANDATORY)
     @NestedLRA
-    public Response nestedActivity(@HeaderParam(LRAClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
-                                   @HeaderParam(LRAClient.LRA_HTTP_HEADER) String nestedLRAId) {
+    public Response nestedActivity(@HeaderParam(LRAHttpClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
+                                   @HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String nestedLRAId) {
         assert nestedLRAId != null;
         Activity activity = addWork(nestedLRAId, rcvId);
 
@@ -391,8 +402,8 @@ public class ActivityController {
     @Path(MULTI_LEVEL_NESTED_ACTIVITY_RESOURCE_METHOD)
     @LRA(LRA.Type.MANDATORY)
     public Response multiLevelNestedActivity(
-            @HeaderParam(LRAClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
-            @HeaderParam(LRAClient.LRA_HTTP_HEADER) String nestedLRAId,
+            @HeaderParam(LRAHttpClient.LRA_HTTP_RECOVERY_HEADER) String rcvId,
+            @HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String nestedLRAId,
             @QueryParam("nestedCnt") @DefaultValue("1") Integer nestedCnt) {
         assert nestedLRAId != null;
         Activity activity = addWork(nestedLRAId, rcvId);
@@ -401,12 +412,12 @@ public class ActivityController {
             return Response.status(Response.Status.EXPECTATION_FAILED).entity("Missing lra data").build();
         }
 
-        URL lraURL;
+        LRAUrl lraURL;
 
         try {
-            lraURL = new URL(URLDecoder.decode(nestedLRAId, "UTF-8"));
+            lraURL = new LRAUrl(new URL(URLDecoder.decode(nestedLRAId, "UTF-8")));
         } catch (MalformedURLException | UnsupportedEncodingException e) {
-            throw new InvalidLRAIdException(nestedLRAId, e.getMessage(), e);
+            throw new InvalidLRAException(nestedLRAId, e.getMessage(), e);
         }
 
         // invoke resources that enlist nested LRAs
@@ -445,21 +456,13 @@ public class ActivityController {
     @GET
     @Path(CANCEL_ON_RESOURCE_METHOD)
     @Produces(MediaType.APPLICATION_JSON)
-    @LRA(value = LRA.Type.REQUIRED, cancelOn = {Response.Status.NOT_FOUND, Response.Status.BAD_REQUEST})
-    public Response cancelOn(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {
+//    @LRA(value = LRA.Type.REQUIRED, cancelOn = {Response.Status.NOT_FOUND, Response.Status.BAD_REQUEST})
+    @LRA(value = LRA.Type.REQUIRED, cancelOn = {NotFoundException.class})
+    public Response cancelOn(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) {
         activityService.add(new Activity(lraId));//NarayanaLRAClient.getLRAId(lraId)));
 
-        return Response.status(Response.Status.BAD_REQUEST).entity(Entity.text("Simulate buisiness logic failure")).build();
-    }
-
-    @GET
-    @Path(CANCEL_ON_FAMILY_RESOURCE_METHOD)
-    @Produces(MediaType.APPLICATION_JSON)
-    @LRA(value = LRA.Type.REQUIRED, cancelOnFamily = {Response.Status.Family.CLIENT_ERROR})
-    public Response cancelOnFamily(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {
-        activityService.add(new Activity(lraId));//NarayanaLRAClient.getLRAId(lraId)));
-
-        return Response.status(Response.Status.BAD_REQUEST).entity(Entity.text("Simulate buisiness logic failure")).build();
+        throw new NotFoundException("cancelOn test: Simulate buisiness logic failure");
+//        return Response.status(Response.Status.BAD_REQUEST).entity(Entity.text("Simulate buisiness logic failure")).build();
     }
 
     @GET
@@ -467,7 +470,7 @@ public class ActivityController {
     @Produces(MediaType.APPLICATION_JSON)
     @TimeLimit(limit = 100, unit = TimeUnit.MILLISECONDS)
     @LRA(value = LRA.Type.REQUIRED)
-    public Response timeLimitRequiredLRA(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {
+    public Response timeLimitRequiredLRA(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) {
         activityService.add(new Activity(lraId));//NarayanaLRAClient.getLRAId(lraId)));
 
         try {
@@ -484,7 +487,7 @@ public class ActivityController {
     @Produces(MediaType.APPLICATION_JSON)
     @TimeLimit(limit = 100, unit = TimeUnit.MILLISECONDS)
     @LRA(value = LRA.Type.REQUIRED)
-    public Response extendTimeLimit(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {
+    public Response extendTimeLimit(@HeaderParam(LRAHttpClient.LRA_HTTP_HEADER) String lraId) {
         activityService.add(new Activity(lraId));//NarayanaLRAClient.getLRAId(lraId)));
 
         try {
@@ -494,7 +497,7 @@ public class ActivityController {
              * sleep for 200
              * return from the method so the LRA will have been running for 200 ms so it should not be cancelled
              */
-            lraClient.renewTimeLimit(lraToURL(lraId, "Invalid LRA id"), 300, TimeUnit.MILLISECONDS);
+            lraClient.renewTimeLimit(new LRAUrl(lraToURL(lraId, "Invalid LRA id")), 300, TimeUnit.MILLISECONDS);
             Thread.sleep(200); // sleep for 200000 micro seconds (should be longer than specified in the @TimeLimit annotation)
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

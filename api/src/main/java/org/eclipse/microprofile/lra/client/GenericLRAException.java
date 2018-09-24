@@ -20,24 +20,27 @@
 
 package org.eclipse.microprofile.lra.client;
 
-import javax.ws.rs.WebApplicationException;
-import java.net.URL;
-
-public class GenericLRAException extends WebApplicationException {
+public class GenericLRAException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
-    private URL lraId;
+    private LRAId lraId;
     private int statusCode;
 
+    /**
+     * a transport specific status code. For example in a JAX-RS based implementation
+     * it would correspond to an HTTP status code.
+     *
+     * @return a transport specific status code
+     */
     public int getStatusCode() {
         return statusCode;
     }
 
-    public URL getLraId() {
+    public LRAId getLraId() {
         return lraId;
     }
 
-    public GenericLRAException(URL lraId, int statusCode, String message,
+    public GenericLRAException(LRAId lraId, int statusCode, String message,
                                Throwable cause) {
         super(String.format("%s: %s", lraId, message), cause);
 

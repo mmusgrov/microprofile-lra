@@ -19,7 +19,7 @@
  *******************************************************************************/
 package org.eclipse.microprofile.lra.tck;
 
-import org.eclipse.microprofile.lra.client.LRAClient;
+import org.eclipse.microprofile.lra.client.http.LRAHttpClient;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -36,8 +36,9 @@ import javax.ws.rs.core.MediaType;
 public class TckResource {
 
     private static final String VERBOSE = "verbose";
+
     @Inject
-    private LRAClient lraClient;
+    private LRAHttpClient lraClient;
 
     private TckTests test;
 

@@ -20,6 +20,7 @@
 
 package org.eclipse.microprofile.lra.annotation;
 
+import javax.interceptor.InterceptorBinding;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
@@ -49,13 +50,14 @@ import java.lang.annotation.Target;
  *   <li>SUPPORTS if there is an LRA present a new LRA is nested under otherwise
  *   a new top level LRA is begun
  *   <li>NOT_SUPPORTED nested does not make sense and operations on this resource
- *   that contain a LRA context will immediately return with a
- *   <code>412 Precondition Failed</code> HTTP status code
+ *   that contain a LRA context will immediately throw a
+ *   {@link org.eclipse.microprofile.lra.client.InvalidLRAException}
  *   <li>NEVER nested does not make sense and requests that carry a LRA context
- *   will immediately return with a <code>412 Precondition Failed</code> HTTP
- *   status code
+ *   will immediately throw
+ *   {@link org.eclipse.microprofile.lra.client.InvalidLRAException}
  * </ul>
  */
+@InterceptorBinding
 @Inherited
 @Retention(value = RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.METHOD})

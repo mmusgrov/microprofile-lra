@@ -94,7 +94,13 @@ class TckMethodResult {
             passed = false;
             failureReason = verbose ? t : null;
         } finally {
-            suite.after();
+            try {
+                suite.after();
+            } catch (Exception e) {
+                result = e.getMessage();
+                passed = false;
+                failureReason = verbose ? e : null;
+            }
         }
     }
 }

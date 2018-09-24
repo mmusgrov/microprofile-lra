@@ -19,25 +19,44 @@
  *******************************************************************************/
 package org.eclipse.microprofile.lra.client;
 
-import javax.ws.rs.WebApplicationException;
+import java.io.Serializable;
+import java.util.Objects;
 
-public class InvalidLRAIdException extends WebApplicationException {
-    private final String lraId;
+/**
+ * A globally uniue identity for an LRA
+ *
+ * Implementations should provide a toString implementation
+ * that uniquely identifies the LRA.
+ */
+public class LRAId implements Cloneable, Serializable {
+    private String stringForm;
 
-    /**
-     * Invalid LRA id exception.
-     *
-     * @param lraId  LRA id that is behind this exception
-     * @param message  error message of this exception
-     * @param cause  cause exception
-     */
-    public InvalidLRAIdException(String lraId, String message, Throwable cause) {
-        super(String.format("%s, lra id: %s", message, lraId), cause);
-
-        this.lraId = lraId;
+    public LRAId(String stringForm) {
+        this.stringForm = stringForm;
     }
 
-    public String getLraId() {
-        return this.lraId;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (!(o instanceof LRAId)) {
+            return false;
+        }
+
+        LRAId lraId = (LRAId) o;
+
+        return Objects.equals(stringForm, lraId.stringForm);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(stringForm);
+    }
+
+    @Override
+    public String toString() {
+        return stringForm;
     }
 }

@@ -20,6 +20,8 @@
 
 package org.eclipse.microprofile.lra.annotation;
 
+import org.eclipse.microprofile.lra.client.LRAClient;
+
 import javax.interceptor.InterceptorBinding;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -27,16 +29,22 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * In order to support recovery participants must be able to report their status
- * once the completion part of the protocol begins. Valid return values from methods
- * marked with this annotation must match one of the enum names listed in
- * {@link CompensatorStatus}
+ * Participants that have joined an LRA will need the LRA context in order
+ * to respond to {@link Compensate}, {@link Complete}, {@link Status} and
+ * {@link Forget} requests. Similarly, business logic annotated with
+ * the {@link LRA} annotation may need to know whether or not they have
+ * been invoked with an active context. Methods marked with any of these
+ * annotations can obtain the context by providing a method parameter of
+ * type {@link org.eclipse.microprofile.lra.client.LRAId} marked with the
+ * {@link LRAContext} annotation.
  *
- * If the participant has not yet been asked to complete or compensate it should
- * throw {@link org.eclipse.microprofile.lra.client.IllegalLRAStateException}
+ * Note that this is not the only way to obtain the current context.
+ * Other mechanisms include {@link LRAClient#getCurrent()} and transport
+ * specific techniques (for example a JAX-RS annotated resource it would
+ * be appropriate to inject it via a HeaderParam).
  */
 @InterceptorBinding
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.METHOD})
-public @interface Status {
+@Target({ElementType.PARAMETER})
+public @interface LRAContext {
 }

@@ -20,6 +20,7 @@
 
 package org.eclipse.microprofile.lra.annotation;
 
+import javax.interceptor.InterceptorBinding;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -31,6 +32,7 @@ import java.lang.annotation.Target;
  * told to forget. To support this requirement the developer should annotate
  * one of the participant methods with @Forget.
  */
+@InterceptorBinding
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD})
 public @interface Forget {

@@ -20,7 +20,7 @@
 
 package org.eclipse.microprofile.lra.participant;
 
-import java.net.URL;
+import org.eclipse.microprofile.lra.client.LRAId;
 
 /*
  * An object that knows how to recreate a participant from its' persistent form
@@ -37,5 +37,5 @@ public interface LRAParticipantDeserializer {
      * @return a participant that will be asked to complete or compensate during
      * recovery or null if the recoveryState is not recognized
      */
-    LRAParticipant deserialize(URL lraId, byte[] recoveryState);
+    LRAParticipant deserialize(LRAId lraId, byte[] recoveryState);
 }

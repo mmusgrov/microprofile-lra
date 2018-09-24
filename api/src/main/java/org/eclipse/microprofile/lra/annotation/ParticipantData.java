@@ -20,23 +20,27 @@
 
 package org.eclipse.microprofile.lra.annotation;
 
-import javax.interceptor.InterceptorBinding;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * In order to support recovery participants must be able to report their status
- * once the completion part of the protocol begins. Valid return values from methods
- * marked with this annotation must match one of the enum names listed in
- * {@link CompensatorStatus}
+ * Participants join LRAs by marking a bean method (or class) with the {@link LRA}
+ * annotation, indicating which methods to call during completion using the
+ * {@link Compensate} and {@link Complete} annotations. If any method in the bean
+ * is annotated with {@link ParticipantData} then the method will be called
+ * during registration time and any return value will be stored with the LRA
+ * coordinator. This data will be returned to the participant whenever any of the
+ * participant callbacks are invoked.
  *
- * If the participant has not yet been asked to complete or compensate it should
- * throw {@link org.eclipse.microprofile.lra.client.IllegalLRAStateException}
+ * The mechanism by which this data is passed to the particpant is specified in
+ * the protocol specific callbacks (for example, a JAX-RS praticipant will be
+ * given the data in the body of the request using MediaType.APPLICATION_JSON).
+ *
+ * If the annotation is applied to multiple methods an arbitrary one is chosen.
  */
-@InterceptorBinding
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD})
-public @interface Status {
+public @interface ParticipantData {
 }
