@@ -12,13 +12,6 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 
-// Contributors:
-// Michael Musgrove
-// Nicola Ferraro
-// Ondra Chaloupka
-// Tom Jenkinson
-
-:authors: Michael Musgrove, Nicola Ferraro, Ondra Chaloupka, Tom Jenkinson
 :email: mmusgrov@redhat.com, ni.ferraro@gmail.com, ochaloup@redhat.com, tom.jenkinson@redhat.com
 :revnumber: 0.1
 :revdate: 2018-03-27
