@@ -518,9 +518,9 @@ public class TckTests {
             int[] cnt2 = {completedCount(true), completedCount(false)};
 
             /*
-             * The call to activities/timeLimit should have started an LRA whch should have timed out
-             * (because the called resource method sleeps for long than the @TimeLimit annotation specifies).
-             * Therefore the it should have compensated:
+             * The call to activities/timeLimit should have started an LRA which should have timed out
+             * (because the invoked resource method sleeps for longer than the timeLimit annotation
+             * attribute specifies). Therefore the participant should have compensated:
              */
             assertEquals(cnt1[0], cnt2[0],
                     "timeLimit: complete was called instead of compensate", resourcePath);
@@ -658,8 +658,8 @@ public class TckTests {
             /*
              * The call to activities/timeLimit should have started an LRA whch should not have timed out
              * (because the called resource method renews the timeLimit before sleeping for longer than
-              * the @TimeLimit annotation specifies).
-             * Therefore the it should not have compensated:
+             * the timeLimit annotation attribute specifies).
+             * Therefore the participant should not have compensated:
              */
             assertEquals(cnt1[0] + 1, cnt2[0],
                     resourcePath.getUri().toString() + ": compensate was called instead of complete", resourcePath);

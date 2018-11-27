@@ -30,7 +30,6 @@ import org.eclipse.microprofile.lra.annotation.Complete;
 import org.eclipse.microprofile.lra.annotation.Leave;
 import org.eclipse.microprofile.lra.annotation.NestedLRA;
 import org.eclipse.microprofile.lra.annotation.Status;
-import org.eclipse.microprofile.lra.annotation.TimeLimit;
 import org.eclipse.microprofile.lra.client.IllegalLRAStateException;
 import org.eclipse.microprofile.lra.tck.participant.model.Activity;
 import org.eclipse.microprofile.lra.annotation.CompensatorStatus;
@@ -205,7 +204,7 @@ public class ActivityController {
     @PUT
     @Path("/compensate")
     @Produces(MediaType.APPLICATION_JSON)
-    @Compensate
+    @Compensate(timeLimit = 0, timeUnit = TimeUnit.SECONDS)
     public Response compensateWork(@HeaderParam(LRA_HTTP_HEADER) String lraId, String userData)
         throws NotFoundException {
 
@@ -468,16 +467,17 @@ public class ActivityController {
     @GET
     @Path("/timeLimit")
     @Produces(MediaType.APPLICATION_JSON)
-    @TimeLimit(limit = 100, unit = TimeUnit.MILLISECONDS)
-    @LRA(value = LRA.Type.REQUIRED, terminal = false)
+    @LRA(value = LRA.Type.REQUIRED, terminal = false, timeLimit = 100, timeUnit = TimeUnit.MILLISECONDS)
     public Response timeLimit(@HeaderParam(LRA_HTTP_HEADER) String lraId) {
         assertHeaderPresent(lraId);
 
         activityService.add(new Activity(lraId));
 
         try {
-            Thread.sleep(300); // sleep for 200 miliseconds (should be longer than specified in the @TimeLimit annotation)
         } catch (InterruptedException e) {
+            Thread.sleep(300); // sleep for longer than specified in the timeLimit annotation attribute
+        }
+        catch (InterruptedException e) {
             e.printStackTrace();
         }
         return Response.status(Response.Status.OK).entity(Entity.text("Simulate buisiness logic timeoout")).build();
@@ -486,8 +486,7 @@ public class ActivityController {
     @GET
     @Path("/renewTimeLimit")
     @Produces(MediaType.APPLICATION_JSON)
-    @TimeLimit(limit = 100, unit = TimeUnit.MILLISECONDS)
-    @LRA(value = LRA.Type.REQUIRED, terminal = false)
+    @LRA(value = LRA.Type.REQUIRED, terminal = false, timeLimit = 100, timeUnit = TimeUnit.MILLISECONDS)
     public Response extendTimeLimit(@HeaderParam(LRA_HTTP_HEADER) String lraId) {
         assertHeaderPresent(lraId);
 
@@ -495,12 +494,12 @@ public class ActivityController {
 
         try {
             /*
-             * the incomming LRA was created with a timeLimit of 100 ms via the @TimeLimit annotation
-             * update the timeLimit to 300 sleep for 200 return from the method so the LRA will
+             * the incomming LRA was created with a timeLimit of 100 ms via the timeLimit annotation
+             * attribute update the timeLimit to 300 sleep for 200 return from the method so the LRA will
              * have been running for 200 ms so it should not be cancelled
              */
             lraClient.renewTimeLimit(lraToURL(lraId, "Invalid LRA id"), 300, TimeUnit.MILLISECONDS);
-            // sleep for 200000 micro seconds (should be longer than specified in the @TimeLimit annotation)
+            // sleep for 200000 micro seconds (should be longer than specified in the timeLimit annotation attribute)
             Thread.sleep(200);
         } catch (InterruptedException e) {
             e.printStackTrace();
