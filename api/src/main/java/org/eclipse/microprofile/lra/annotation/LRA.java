@@ -26,7 +26,7 @@ import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.util.concurrent.TimeUnit;
+import java.time.temporal.ChronoUnit;
 
 /**
  * An annotation for controlling the lifecycle of Long Running Actions (LRAs).
@@ -181,7 +181,7 @@ public @interface LRA {
      * @return the unit of time that the {@link LRA#timeLimit()} attribute is
      * measured in.
      */
-    TimeUnit timeUnit() default TimeUnit.SECONDS;
+    ChronoUnit timeUnit() default ChronoUnit.SECONDS;
 
     /**
      * Normally if an LRA is present when a bean method is executed it will not

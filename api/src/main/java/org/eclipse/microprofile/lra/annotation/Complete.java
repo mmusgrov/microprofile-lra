@@ -24,7 +24,7 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.util.concurrent.TimeUnit;
+import java.time.temporal.ChronoUnit;
 
 /**
  * When a bean method executes in the context of an LRA any methods in the bean
@@ -55,5 +55,5 @@ public @interface Complete {
      * @return the unit of time that the {@link Complete#timeLimit()} attribute is
      * measured in.
      */
-    TimeUnit timeUnit() default TimeUnit.SECONDS;
+    ChronoUnit timeUnit() default ChronoUnit.SECONDS;
 }

@@ -639,7 +639,7 @@ example, to indicate that an LRA should automatically cancel after 100 milliseco
   @GET
   @Path("/doitASAP")
   @Produces(MediaType.APPLICATION_JSON)
-  @LRA(value = LRA.Type.REQUIRED, timeLimit = 100, timeUnit = TimeUnit.MILLISECONDS)
+  @LRA(value = LRA.Type.REQUIRED, timeLimit = 100, timeUnit = ChronoUnit.MILLI)
   public Response theClockIsTicking(
       @HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {...}
 ----
@@ -657,7 +657,7 @@ indicate that its' ability to compensate is limited to 100 milliseconds could be
 ----
     @PUT
     @Path("/compensate")
-    @Compensate(timeLimit = 100, timeUnit = TimeUnit.MILLISECONDS)
+    @Compensate(timeLimit = 100, timeUnit = ChronoUnit.MILLIS)
     public Response completeWork(@HeaderParam(LRA_HTTP_HEADER) String lraId,
                                  String userData) { ... }
 ----
@@ -797,10 +797,10 @@ public class UnannotatedParticpant implements LRAParticipant, Serializable {
     {
         // start a new LRA with an unlimited timeout
         URL lraId = lraClient.startLRA(
-                        "Unannotated client", 0L, TimeUnit.MILLISECONDS);
+                        "Unannotated client", 0L, ChronoUnit.MILLIS);
 
         // Join the LRA as a participant.
-        lraManagement.joinLRA(this, lraId, 0L, TimeUnit.SECONDS);
+        lraManagement.joinLRA(this, lraId, 0L, ChronoUnit.SECONDS);
 
         // do something interesting
 
