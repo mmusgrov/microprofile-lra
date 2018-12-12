@@ -303,12 +303,25 @@ public class TckTests {
                 .header(LRAClient.LRA_HTTP_HEADER, lra)
                 .put(Entity.text(""));
 
-        Object parentId = response.getHeaders().getFirst(LRAClient.LRA_HTTP_HEADER);
-
-        assertNotNull(parentId, "nestedActivity: null parent LRA", resourcePath);
-        assertEquals(lra.toExternalForm(), parentId, "nestedActivity should have returned the parent LRA", resourcePath);
-
+        // the business method returns the nested LRA
         String nestedLraId = checkStatusAndClose(response, Response.Status.OK.getStatusCode(), true, resourcePath);
+
+        // get the list of active LRAs (there should be the parent and the nested one)
+        List<Object> lraHeaders = response.getHeaders().get(LRAClient.LRA_HTTP_HEADER);
+
+        assertEquals(2, lraHeaders.size(),
+                "The LRA JAX-RS header should have contained both the parent and the nested LRA)", resourcePath);
+
+        // the headers are populated via a stack so the fist header is the current one (ie the nested LRA
+        Object nestedLRA = lraHeaders.get(0);
+        Object parentLRA = lraHeaders.get(1);
+
+        assertNotNull(nestedLraId,
+                "ActivityController#nestedActivity should have returned the nested LRA", resourcePath);
+        assertEquals(nestedLraId, nestedLRA,
+                "ActivityController#nestedActivity returned headers does not contain the nested LRA", resourcePath);
+        assertEquals(lra.toExternalForm(), parentLRA,
+                "ActivityController#nestedActivity  returned headers does not contain the parent LRA", resourcePath);
 
         List<LRAInfo> lras = lraClient.getActiveLRAs();
 
@@ -749,7 +762,7 @@ public class TckTests {
                         resourcePath.getUri().toString(), e.getMessage()));
             }
         });
-        // check that the multiLevelNestedActivity method returned the mandatory LRA followed by two nested LRAs
+        // check that the multiLevelNestedActivity method returned the mandatory LRA followed by any nested LRAs
         assertEquals(nestedCnt + 1, lraArray.length, "multiLevelNestedActivity: step 1", resourcePath);
         assertEquals(lraId, lraArray[0], "multiLevelNestedActivity: step 2", resourcePath); // first element should be the mandatory LRA
 
@@ -764,7 +777,7 @@ public class TckTests {
 
         int[] cnt2 = {completedCount(true), completedCount(false)};
 
-        // check that both nested activities were told to complete
+        // check that all nested activities were told to complete
         assertEquals(cnt1[0] + nestedCnt, cnt2[0], "multiLevelNestedActivity: step 3", resourcePath);
         // and that neither were told to compensate
         assertEquals(cnt1[1], cnt2[1], "multiLevelNestedActivity: step 4", resourcePath);

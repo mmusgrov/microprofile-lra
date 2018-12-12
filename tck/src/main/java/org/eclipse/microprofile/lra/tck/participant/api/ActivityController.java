@@ -369,7 +369,7 @@ public class ActivityController {
 
     @PUT
     @Path("/multiLevelNestedActivity")
-    @LRA(value = LRA.Type.MANDATORY, terminal = false)
+    @LRA(value = LRA.Type.MANDATORY, terminal = true)
     public Response multiLevelNestedActivity(
             @HeaderParam(LRA_HTTP_RECOVERY_HEADER) String rcvId,
             @HeaderParam(LRA_HTTP_HEADER) String nestedLRAId,
