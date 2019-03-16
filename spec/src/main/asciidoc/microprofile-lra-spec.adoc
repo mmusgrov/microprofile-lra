@@ -234,12 +234,8 @@ for writing participants:
 
 1.  <<java-annotations-for-lras,Java Annotations for LRAs>> for controlling
 the life cycle and membership of LRAs
-2.  <<lra-client-api,Client API>> for those occasions where the application
-wishes to make <<use-cases, runtime dynamic decisions>> about how to control LRAs
-3.  <<java-based-lra-participant-registration-api,Java based LRA participant registration API>>
+2.  <<java-based-lra-participant-registration-api,Java based LRA participant registration API>>
 to support services that do not use JAX-RS
-
-The annotatons API and the client API are meant to be semantically equivalent.
 
 [[java-annotations-for-lras]]
 === Java Annotations for LRAs
@@ -327,18 +323,18 @@ also contains methods annotated with `@Compensate` and `@Complete` then the bean
 (aka participant or compensator) will be enlisted with the LRA. Enlisting with
 an LRA means that the bean will be notified when the current LRA is
 subsequently cancelled or closed. In addition the implementation should generate a
-URI for this participant that can be used with the <<lra-client-api,Client API>>
-for recovery purposes and should make it available to the participant via a JAX-RS
+URI for this participant that can be used
+for recovery purposes and it should make it available to the participant via a JAX-RS
 header param with name defined by the Java constant `LRA_HTTP_RECOVERY_HEADER` as defined
-<<source-LRAClient,in the Client API>>
-(https://github.com/eclipse/microprofile-lra/blob/master/api/src/main/java/org/eclipse/microprofile/lra/client/LRAClient.java[github link]).
+<<source-LRA, in the LRA annotation>>
+(https://github.com/eclipse/microprofile-lra/tree/master/api/src/main/java/org/eclipse/microprofile/lra/annotation/LRA.java[github link]).
 Enlisting in an LRA is explained in more detail
 <<compensating-activities,in a later section>> of this document.
 
 A method which executes with an LRA context
 can obtain the context by injecting a JAX-RS header param with the name
 specified by the Java constant `LRA_HTTP_HEADER` as defined
-<<source-LRAClient, in the Client API>>.
+<<source-LRA, in the LRA annotation>>
 
 It is the `LRA.Type` element that provides fine grained control over the
 LRA for the duration of the execution of the annotated method:
@@ -416,8 +412,10 @@ which when returned as the
 https://javaee.github.io/javaee-spec/javadocs/javax/ws/rs/core/Response.html#status-int-[Response status code]
 cause the LRA to be cancelled.
 
-Bear in mind that the LRA is expected to be used at JAX-RS
+Bear in mind that the LRA is expected to be used with JAX-RS
 which expects the `Response` being the method return type.
+If a `200 OK` response is to be returned then the method can
+return any data type that it desires.
 The specification does not discuss what happens when
 an uncaught exception is thrown from the `@LRA` annotated method.
 It's up to the framework to transform the thrown exception
@@ -538,8 +536,7 @@ the method finishes and the `end = true` attribute on the confirmTrip method for
 ==== Compensating Activities
 
 The application developer indicates which JAX-RS method to use for a compensating
-activity by annotating it with both the `@Compensate` and the JAX-RS `@PUT`
-footnote:[issue #35 will remove the JAX-RS dependency for this annotation] annotations.
+activity by annotating it with both the `@Compensate` and the JAX-RS `@PUT`.
 Whenever the associated resource is invoked in the context of
 an LRA the endpoint corresponding to the `@Compensate` method MUST be enlisted with
 the LRA. If the LRA is subsequently cancelled then the compensation method MUST be invoked.
@@ -550,7 +547,7 @@ For example:
   @PUT
   @Path("/compensate")
   @Compensate
-  public Response compensateWork(@HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId)
+  public Response compensateWork(@HeaderParam(LRA.LRA_HTTP_HEADER) String lraId)
   {
     // compensate for whatever activity the business logic has associated with lraId
     return Response.ok(ParticipantStatus.Compensated.name()).build();
@@ -591,21 +588,14 @@ immediately the `@Compensate` method SHOULD do one or more of the following:
 - mark the method as a JAX-RS asynchronous method (using the
   `javax.ws.rs.container.Suspended` annotation).
 
-In each case it MUST provide an `@Status` method that reports the progress of
-the compensation. The only case where the `@Status` method is not mandatory is
-if the compensation activity cannot fail.
+The `@Status` method, if present, MUST report the progress of the compensation.
 
 Similarly if it cannot perform a completion activity immediately.
 
 If the `@Compensate` or `@Complete` annotation is present on multiple methods
 then an arbitrary one is chosen. If the annotation is not accompanied by
-a JAX-RS `@PUT` annotation the error should be reported using a JAX-RS
+a JAX-RS `@PUT` annotation the error SHOULD be reported using a JAX-RS
 exception mapper that maps to a `412 Precondition Failed` HTTP status code.
-
-footnote:[issue #15 (Provide an annotation to supply opaque data during
-participant registration) allows participants to register opaque data when
-joining with an LRA. This data is made available to the completion and
-compensation callbacks]
 
 [[nesting-lras]]
 ==== Nesting LRAs
@@ -641,9 +631,7 @@ section for when this feature could be useful.
     }
 ----
 
-Note that there is no annotation to directly cancel a nested LRA
-and the <<lra-client-api,Java LRAClient api>> must be
-used for this purpose if required.
+Note that the mechanics of canceling a nested LRA is no different from a nested LRA.
 
 [[timing-out-lras-and-compensators]]
 ==== Timing out LRAs and Participants
@@ -660,7 +648,7 @@ example, to indicate that an LRA should automatically cancel after 100 milliseco
   @Produces(MediaType.APPLICATION_JSON)
   @LRA(value = LRA.Type.REQUIRED, timeLimit = 100, timeUnit = ChronoUnit.MILLI)
   public Response theClockIsTicking(
-      @HeaderParam(LRAClient.LRA_HTTP_HEADER) String lraId) {...}
+      @HeaderParam(LRA.LRA_HTTP_HEADER) String lraId) {...}
 ----
 
 Furthermore, the ability to compensate or complete may be transient capabilities of a
@@ -692,8 +680,7 @@ a LRA and if the bean class has registered a participant with the active LRA
 it will be removed from the LRA just before the bean method is entered
 (and will not be asked to complete or compensate when the LRA is subsequently
 ended). Even though the method runs without an LRA context the implemention
-MUST make the context available either via an JAX-RS header param or via the
-<<lra-client-api,Java LRAClient api>>.
+MUST make the context available either via an JAX-RS header param.
 
 An example of this annotion is shown next:
 
@@ -765,19 +752,6 @@ survive system failures. The specification is not prescriptive about how
 an implementation achieves resiliency provided that it obeys the requirements
 of the specification as laid out in this document.
 
-[[lra-client-api]]
-=== LRA Client API
-
-For completeness the proposal supports clients that wish to directly
-control LRAs and participants or wish to dynamically control LRAs and
-LRA enlistment. To support this class of user an instance of
-<<source-LRAClient,LRA Client API>>
-(https://github.com/eclipse/microprofile-lra/blob/master/api/src/main/java/org/eclipse/microprofile/lra/client/LRAClient.java[github link])
-can be instantiated directly or injected if the client is using CDI. This
-interface provides developers with complete programmatic control of the LRA
-capabilities.  The later section <<use-cases, on use cases>> provides some
-examples of how to inject and use the client API.
-
 [[java-based-lra-participant-registration-api]]
 === Java based LRA participant registration API
 
@@ -802,24 +776,25 @@ shows how to inject instances of the API and how to perform work in the context 
 @Path("/")
 public class UnannotatedParticpant implements LRAParticipant {
     @Inject
-    private LRAClient lraClient;
-
-    @Inject
     private LRAManagement lraManagement;
 
     public void doInTransaction() throws JoinLRAException
     {
         // start a new LRA with an unlimited timeout
-        URI lraId = lraClient.startLRA(
-                        "Unannotated client", 0L, ChronoUnit.MILLIS);
+        // by invoking a suitable JAX-RS resource method annotated
+        // with @LRA(value = LRA.Type.REQUIRES_NEW, end = false)
+        ...
 
         // Join the LRA as a participant.
         lraManagement.joinLRA(this, lraId, 0L, ChronoUnit.SECONDS);
 
         // do something interesting
 
-        // close the LRA which should cause the completion call back to be invoked
-        lraClient.closeLRA(lraId);
+        // close the LRA by invoking a suitable JAX-RS resource method
+        // annotated with, for example
+        //  @LRA(value = LRA.Type.SUPPORTS, end = true)
+        // This will cause the completion call back to be invoked
+        ...
 
         // the completeWork method will have been invoked at this point
     }
@@ -843,11 +818,11 @@ public class UnannotatedParticpant implements LRAParticipant {
 ----
 
 The framework must guarantee that participants will still be triggered (the LRA protocol still provides the "all or
-nothing" guarantees that traditional transactions give). +
+nothing" guarantees that traditional transactions give).
 This means that an implementation for all JAX-RS resources which implement the _LRAParticipant_ interface directly
 or indirectly, MUST create some proxy which can be called by the coordinator. +
 This to ensure that after this class has joined an LRA (through the _lraManagement.joinLRA()_ ) the _complete_ or
-_compensate_ methods can be called by the coordinator in case the micro-service crashed before this notification could
+_compensate_ methods can be called by the coordinator in case the microservice crashed before this notification could
 be delivered.
 
 Serializable participants need to know how to contact the original
@@ -863,7 +838,8 @@ Annotations for LRAs>>.
 
 ==== Programmatic API versus CDI annotations
 
-There are scenarios where a business method may wish to make runtime decisions
+Although the programmatic API will not be available in the first release of this
+specification there are scenarios where a business method may wish to make runtime decisions
 about how to interact with an LRA (such as whether or not to start a new one or
 to join in with an existing one, etc).
 Take for example a trip booking service which starts a top level LRA and includes
@@ -916,15 +892,14 @@ LRA before sending the flight booking request:
 
 [source,java]
 ----
-    @Inject
-    private LRAClient lraClient;
-
     @PUT
     @Path("/trip")
     @LRA(LRA.Type.REQUIRED)
     public void bookTrip(@HeaderParam(LRA_HTTP_HEADER) URI lraId) {
         // start a nested LRA with lraId as the parent
-        flightLraId = lraClient.startLRA(lraId, ...)
+        // by invoking a suitable JAX-RS resource method annotated
+        // with @Nested and @LRA(value = LRA.Type.MANDATORY, end = false)
+        flightLraId = ...
 
         // same code as before but now the nested LRA will
         // be active when the flight service method
@@ -933,7 +908,7 @@ LRA before sending the flight booking request:
     }
 ----
 
-This API method creates a new LRA nested under the one identified by `lraId`.
+This JAX-RS invocation creates a new LRA nested under the one identified by `lraId`.
 When the flight request is sent the flight booking will be made in the context
 of the nested LRA which means that the trip provider can later cancel the booking
 without cancelling the whole trip, thereby allowing the client to choose some
@@ -941,7 +916,22 @@ atlernative transport mode for his trip:
 
 [source,java]
 ----
-   lraClient.cancelLRA(flightLraId);
+   // cancel the nested LRA by invoking a suitable JAX-RS resource method
+   // annotated with, for example
+   //  @LRA(value = LRA.Type.SUPPORTS, end = true)
+   // In this example though the active context is not flightLraId so it needs
+   // to be explicity set in the request headers:
+
+        Response response = null;
+        try {
+            response = aResourcPathAnnotatedWithLRAEndEqualsTrue
+                    .request()
+                    .header(LRA.LRA_HTTP_HEADER, flightLraId)
+                    .put(Entity.text(""));
+            ...
+        finally {
+            response.close();
+        }
 
    // now it is possible to offer the customer the choice of alternative transport
 ----
@@ -970,13 +960,6 @@ include::{sourcedir}/org/eclipse/microprofile/lra/annotation/ParticipantStatus.j
 ----
 <<<
 
-=== LRAClient
-[[source-LRAClient]]
-----
-include::{sourcedir}/org/eclipse/microprofile/lra/client/LRAClient.java[LRAClient]
-----
-<<<
-
 === LRAManagement
 [[source-LRAManagement]]
 ----
@@ -990,49 +973,3 @@ include::{sourcedir}/org/eclipse/microprofile/lra/participant/LRAManagement.java
 include::{sourcedir}/org/eclipse/microprofile/lra/participant/LRAParticipant.java[LRAParticipant]
 ----
 <<<
-
-[[appendix-2]]
-== Appendix 2
-
-[[typical-recovery-scenarios]]
-=== Typical Recovery Scenarios
-
-Setup:
-
-* Start 2 services and an LRA coordinator
-* Start an LRA and enlist both services
-
-[[scenario-1]]
-==== Scenario 1
-
-* Kill the coordinator before closing the LRA
-* Restart the coordinator which should cause the LRA to be reloaded
-(from a log in persistent storage)
-* Since the LRA is still active recovery should leave it alone
-* Close the LRA
-* Each service should be told to complete (and the log should be
-removed)
-
-[[scenario-2]]
-==== Scenario 2
-
-* Kill one of the services before closing the LRA
-* The LRA close should fail because one of the services is down
-* Periodic recovery should keep retrying to close the LRA (even if you
-restart the coordinator it should still replay the close)
-* Restart the service
-* Periodic recovery should now successfully close the LRA
-
-[[scenario-3]]
-==== Scenario 3
-
-* Crash the second service after the first one has completed (this should
-generate a heuristic)
-* Restart the second service
-* Periodic recovery should replay the complete on the failed participant
-
-[[scenarios-4-5-and-6]]
-==== Scenarios 4, 5 and 6
-
-* And similarly, the same 3 scenarios but cancelling an LRA instead of
-closing it.

@@ -27,6 +27,10 @@ import javax.ws.rs.NotFoundException;
 import java.net.URI;
 import java.time.temporal.ChronoUnit;
 
+/**
+ * @deprecated there is no direct replacement but the TCK contains a class called LRAClientOps
+ * which duplicates most of the functionality provided by this interface
+ */
 public interface LRAClient {
     /**
      * the name of the HTTP header field that contains the LRA id associated with
