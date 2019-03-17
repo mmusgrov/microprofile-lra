@@ -22,6 +22,10 @@ package org.eclipse.microprofile.lra.tck;
 import static org.eclipse.microprofile.lra.tck.participant.api.LraController.ACCEPT_WORK;
 import static org.eclipse.microprofile.lra.tck.participant.api.LraController.LRA_CONTROLLER_PATH;
 import static org.eclipse.microprofile.lra.tck.participant.api.LraController.TRANSACTIONAL_WORK_PATH;
+import static org.eclipse.microprofile.lra.tck.participant.api.ParticipatingTckResource.COMPENSATED_CNT_PATH;
+import static org.eclipse.microprofile.lra.tck.participant.api.ParticipatingTckResource.COMPLETED_CNT_PATH;
+import static org.eclipse.microprofile.lra.tck.participant.api.ParticipatingTckResource.JOIN_WITH_EXISTNG_LRA_PATH;
+import static org.eclipse.microprofile.lra.tck.participant.api.ParticipatingTckResource.TCK_PARTICIPANT_RESOURCE_PATH;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -304,6 +308,58 @@ public class TckTests {
                 lraClient.isLRAFinished(lra));
     }
 
+    /**
+     * client invokes two participants in a LRA context
+     * close the LRA
+     * check that both participants were asked to complete
+     */
+    @Test
+    public void joinWithTwoResourcesWithClose() throws WebApplicationException {
+        joinWithTwoResources(true);
+    }
+
+    /**
+     * client invokes two participants in a LRA context
+     * cancel the LRA
+     * check that both participants were asked to compensate
+     */
+    @Test
+    public void joinWithTwoResourcesWithCancel() throws WebApplicationException {
+        joinWithTwoResources(false);
+    }
+
+    private void joinWithTwoResources(boolean close) throws WebApplicationException {
+        int completedCount1 = getActivityCount(LRA_CONTROLLER_PATH, "completedactivitycount");
+        int compensatedCount1 = getActivityCount(LRA_CONTROLLER_PATH, "compensatedactivitycount");
+        int completedCount2 = getActivityCount(TCK_PARTICIPANT_RESOURCE_PATH, COMPLETED_CNT_PATH);
+        int compensatedCount2 = getActivityCount(TCK_PARTICIPANT_RESOURCE_PATH, COMPENSATED_CNT_PATH);
+
+        WebTarget resource1Path = tckSuiteTarget.path(LRA_CONTROLLER_PATH).path(TRANSACTIONAL_WORK_PATH);
+        WebTarget resource2Path = tckSuiteTarget.path(TCK_PARTICIPANT_RESOURCE_PATH).path(JOIN_WITH_EXISTNG_LRA_PATH);
+
+        URI lra = lraClient.startLRA(null, lraClientId(), lraTimeout(), ChronoUnit.MILLIS);
+
+        // invoke two JAX-RS resources in the context of the lra which should enlist them both:
+        Response response1 = resource1Path.request().header(LRA.LRA_HTTP_HEADER, lra).put(Entity.text(""));
+        checkStatusAndClose(Response.Status.OK, response1, resource1Path);
+        Response response2 = resource2Path.request().header(LRA.LRA_HTTP_HEADER, lra).put(Entity.text(""));
+        checkStatusAndClose(Response.Status.OK, response2, resource2Path);
+
+        if (close) {
+            lraClient.closeLRA(lra);
+
+            assertTrue("joinWithTwoResourcesWithClose: both resources should have completed",
+                    getActivityCount(LRA_CONTROLLER_PATH, "completedactivitycount") > completedCount1
+                    && getActivityCount(TCK_PARTICIPANT_RESOURCE_PATH, COMPLETED_CNT_PATH) >completedCount2);
+        } else {
+            lraClient.cancelLRA(lra);
+
+            assertTrue("joinWithTwoResourcesWithCancel: both resources should have compensated",
+                    getActivityCount(LRA_CONTROLLER_PATH, "compensatedactivitycount") > compensatedCount1
+                            && getActivityCount(TCK_PARTICIPANT_RESOURCE_PATH, COMPLETED_CNT_PATH) > compensatedCount2);
+        }
+    }
+
     @Test
     public void leaveLRA() throws WebApplicationException {
         int beforeCompletedCount = getCompletedCount();
@@ -531,7 +587,11 @@ public class TckTests {
     }
 
     private int getActivityCount(String activityCountTargetPath) {
-        WebTarget resourcePath = tckSuiteTarget.path(LRA_CONTROLLER_PATH)
+        return getActivityCount(LRA_CONTROLLER_PATH, activityCountTargetPath);
+    }
+
+    private int getActivityCount(String basePath, String activityCountTargetPath) {
+        WebTarget resourcePath = tckSuiteTarget.path(basePath)
                 .path(activityCountTargetPath);
 
         Response response = resourcePath.request().get();

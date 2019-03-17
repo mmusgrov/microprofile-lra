@@ -25,6 +25,7 @@ import org.eclipse.microprofile.lra.annotation.ws.rs.LRA;
 import org.eclipse.microprofile.lra.annotation.ws.rs.Leave;
 
 import javax.enterprise.context.ApplicationScoped;
+import javax.ws.rs.GET;
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.PUT;
@@ -92,7 +93,7 @@ public class ParticipatingTckResource {
         return Response.ok().build();
     }
 
-    @PUT
+    @GET
     @Path(COMPLETED_CNT_PATH)
     @Produces(MediaType.APPLICATION_JSON)
     @LRA(LRA.Type.NOT_SUPPORTED)
@@ -100,7 +101,7 @@ public class ParticipatingTckResource {
         return Response.ok(COMPLETED_COUNT.get()).build();
     }
 
-    @PUT
+    @GET
     @Path(COMPENSATED_CNT_PATH)
     @Produces(MediaType.APPLICATION_JSON)
     @LRA(LRA.Type.NOT_SUPPORTED)
